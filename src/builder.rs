@@ -735,6 +735,9 @@ impl Builder<'_> {
                     match &callee.kind {
                         ExprKind::Identifier(name) if self.cpp => name.rsplit("::").next().unwrap(),
                         ExprKind::Identifier(name) => name.as_str(),
+                        ExprKind::Member { name, .. } if self.cpp => {
+                            name.rsplit("::").next().unwrap()
+                        }
                         ExprKind::Member { name, .. } => name.as_str(),
                         _ => "<operator>.pointerCall",
                     }
@@ -1062,9 +1065,16 @@ impl Builder<'_> {
                 keys.push(name.trim_start_matches("::").replace("::", "."));
             }
             ExprKind::Member { base, name, .. } if self.cpp => {
-                let owner = self.expression_type(base)?;
-                let owner = owner.trim_end_matches(['*', '&']).replace("::", ".");
-                keys.push(format!("{owner}.{name}"));
+                if name.contains("::") {
+                    // A base/namespace qualifier requires C++ qualified lookup,
+                    // not a same-named method on the receiver's type or a
+                    // guessed global owner. Retain the callee text unresolved.
+                    return None;
+                } else {
+                    let owner = self.expression_type(base)?;
+                    let owner = owner.trim_end_matches(['*', '&']).replace("::", ".");
+                    keys.push(format!("{owner}.{name}"));
+                }
             }
             _ => return None,
         }

@@ -1294,6 +1294,12 @@ impl Parser<'_> {
     }
 
     fn record_definition(&self, start: usize, end: usize) -> Option<usize> {
+        // A template parameter's `class` is not the record introducer, and
+        // its default argument is not an object initializer.
+        let mut start = start;
+        while self.cpp && self.text(start) == "template" && self.text(start + 1) == "<" {
+            start = self.angle_close(start + 1, end)? + 1;
+        }
         if (start..end).any(|i| self.text(i) == "=") {
             return None;
         }
@@ -3578,10 +3584,9 @@ impl Parser<'_> {
             return false;
         }
         if self.cpp {
-            let mut after = start + 1;
-            while after + 1 < end && self.text(after) == "::" {
-                after += 2;
-            }
+            let after = self
+                .cpp_expression_name_end(start, end, false)
+                .unwrap_or(start + 1);
             if after > start + 1
                 && matches!(
                     self.text(after),
@@ -6119,6 +6124,10 @@ impl Parser<'_> {
                     && (alternative_operator(previous) != previous
                         || alternative_operator(self.text(i)) != self.text(i)
                         || matches!(previous, "new" | "delete" | "typename")
+                        || (previous == "template"
+                            && i >= start + 2
+                            && matches!(self.text(i - 2), "::" | "." | "->")
+                            && !expression_type_keyword(self.text(i), true))
                         || expression_type_keyword(previous, true)))
                 {
                     return true;
@@ -6287,6 +6296,59 @@ impl Parser<'_> {
         }
     }
 
+    /// Consume a C++ expression name as components, including template-ids
+    /// between scope separators and operator-function-ids. Template arguments remain
+    /// tokens in the callee span; they are not executable comparison nodes.
+    fn cpp_expression_name_end(&self, start: usize, end: usize, member: bool) -> Option<usize> {
+        if !self.cpp {
+            return None;
+        }
+        let mut cursor = start + usize::from(self.text(start) == "::");
+        loop {
+            if self.tokens.get(cursor)?.kind != TokenKind::Identifier || cursor >= end {
+                return None;
+            }
+            let component = cursor;
+            if self.text(cursor) == "operator" {
+                cursor += 1;
+                match self.text(cursor) {
+                    "[" if self.text(cursor + 1) == "]" => cursor += 2,
+                    "(" if self.text(cursor + 1) == ")" => cursor += 2,
+                    "new" | "delete" => {
+                        cursor += 1;
+                        if self.text(cursor) == "[" && self.text(cursor + 1) == "]" {
+                            cursor += 2;
+                        }
+                    }
+                    "+" | "-" | "*" | "/" | "%" | "^" | "&" | "|" | "~" | "!" | "=" | "<" | ">"
+                    | "+=" | "-=" | "*=" | "/=" | "%=" | "^=" | "&=" | "|=" | "<<" | ">>"
+                    | "<<=" | ">>=" | "==" | "!=" | "<=" | ">=" | "<=>" | "&&" | "||" | "++"
+                    | "--" | "," | "->*" | "->" => cursor += 1,
+                    _ => return None,
+                }
+            } else {
+                cursor += 1;
+                if self.text(cursor) == "<"
+                    && (member
+                        || component > start
+                        || !self.variables.contains(self.text(component))
+                        || self.function_returns.contains_key(self.text(component)))
+                    && let Some(close) = self.angle_close(cursor, end)
+                    && matches!(self.text(close + 1), "::" | "(")
+                {
+                    cursor = close + 1;
+                }
+            }
+            if self.text(cursor) != "::" {
+                return (cursor <= end).then_some(cursor);
+            }
+            cursor += 1;
+            if self.text(cursor) == "template" {
+                cursor += 1;
+            }
+        }
+    }
+
     fn expression(&mut self, minimum: u8) -> Expr {
         let start = self.pos;
         let mut left = self.prefix();
@@ -6378,10 +6440,13 @@ impl Parser<'_> {
                 if self.cpp {
                     self.eat("template");
                 }
-                let name = self.peek().to_string();
-                if !name.is_empty() {
+                let name_start = self.pos;
+                if let Some(after) = self.cpp_expression_name_end(name_start, self.limit, true) {
+                    self.pos = after;
+                } else if !self.peek().is_empty() {
                     self.pos += 1;
                 }
+                let name = self.raw(name_start, self.pos);
                 left = Expr {
                     kind: ExprKind::Member {
                         base: Box::new(left),
@@ -7022,11 +7087,17 @@ impl Parser<'_> {
                 .get(start + 1)
                 .is_some_and(|t| t.kind == TokenKind::Identifier) =>
             {
-                self.pos += 2;
-                while self.eat("::") {
-                    self.eat("template");
-                    if self.pos < self.limit {
-                        self.pos += 1;
+                if self.cpp {
+                    self.pos = self
+                        .cpp_expression_name_end(start, self.limit, false)
+                        .unwrap_or(start + 2);
+                } else {
+                    self.pos += 2;
+                    while self.eat("::") {
+                        self.eat("template");
+                        if self.pos < self.limit {
+                            self.pos += 1;
+                        }
                     }
                 }
                 ExprKind::Identifier(self.raw(start, self.pos))
@@ -7067,19 +7138,17 @@ impl Parser<'_> {
                         ExprKind::Literal(self.raw(start, self.pos))
                     }
                     TokenKind::Identifier => {
-                        while self.eat("::") {
-                            self.eat("template");
-                            if self.pos < self.limit {
-                                self.pos += 1;
+                        if self.cpp {
+                            self.pos = self
+                                .cpp_expression_name_end(start, self.limit, false)
+                                .unwrap_or(start + 1);
+                        } else {
+                            while self.eat("::") {
+                                self.eat("template");
+                                if self.pos < self.limit {
+                                    self.pos += 1;
+                                }
                             }
-                        }
-                        // Template calls: include type arguments in the callee name.
-                        if self.cpp
-                            && self.at("<")
-                            && let Some(close) = self.angle_close(self.pos, self.limit)
-                            && (self.text(close + 1) == "(" || self.text(close + 1) == "::")
-                        {
-                            self.pos = close + 1;
                         }
                         ExprKind::Identifier(self.raw(start, self.pos))
                     }
