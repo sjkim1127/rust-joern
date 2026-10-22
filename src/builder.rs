@@ -733,11 +733,9 @@ impl Builder<'_> {
                     "<operator>.pointerCall"
                 } else {
                     match &callee.kind {
-                        ExprKind::Identifier(name) if self.cpp => name.rsplit("::").next().unwrap(),
+                        ExprKind::Identifier(name) if self.cpp => cpp_call_leaf(name),
                         ExprKind::Identifier(name) => name.as_str(),
-                        ExprKind::Member { name, .. } if self.cpp => {
-                            name.rsplit("::").next().unwrap()
-                        }
+                        ExprKind::Member { name, .. } if self.cpp => cpp_call_leaf(name),
                         ExprKind::Member { name, .. } => name.as_str(),
                         _ => "<operator>.pointerCall",
                     }
@@ -1834,6 +1832,35 @@ impl Builder<'_> {
     }
 }
 
+/// The parser has already accepted the expression name. Scope separators in
+/// template arguments do not qualify the callee itself, and punctuation in an
+/// operator-function-id is not the start of a template argument list.
+fn cpp_call_leaf(name: &str) -> &str {
+    let mut leaf = 0;
+    let mut depth = 0usize;
+    for (index, ch) in name.char_indices() {
+        if depth == 0 && index >= leaf {
+            let rest = &name[index..];
+            if name[leaf..index].trim().is_empty()
+                && rest.strip_prefix("operator").is_some_and(|suffix| {
+                    !suffix.starts_with(|c: char| c.is_alphanumeric() || c == '_')
+                })
+            {
+                return rest;
+            }
+            if rest.starts_with("::") {
+                leaf = index + 2;
+            }
+        }
+        match ch {
+            '<' => depth += 1,
+            '>' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    name[leaf..].trim_start()
+}
+
 fn is_expression_list(expression: &Expr) -> bool {
     match &expression.kind {
         ExprKind::Generated { expression, .. } => is_expression_list(expression),
@@ -1956,9 +1983,24 @@ fn binary_operator(operator: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+    use super::cpp_call_leaf;
     use crate::{analyze, graph::Options};
     use serde_json::Value;
     use std::collections::HashMap;
+
+    #[test]
+    fn cpp_call_leaves_ignore_template_argument_qualification() {
+        for (name, expected) in [
+            ("::demo::get<types::Box<int>>", "get<types::Box<int>>"),
+            ("demo::operator+<types::Tag>", "operator+<types::Tag>"),
+            ("demo::operator< <types::Tag>", "operator< <types::Tag>"),
+            ("demo::operator>><types::Tag>", "operator>><types::Tag>"),
+            ("demo::myoperator<types::Tag>", "myoperator<types::Tag>"),
+            ("demo::operator_names", "operator_names"),
+        ] {
+            assert_eq!(cpp_call_leaf(name), expected);
+        }
+    }
 
     #[test]
     fn nested_function_method_is_an_ast_child_without_parent_cfg_execution() {

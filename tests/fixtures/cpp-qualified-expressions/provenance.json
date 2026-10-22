@@ -37,6 +37,19 @@
       "source": "template_statement.cpp",
       "source_sha256": "3e5a6a4cd5f3ce6e2dc47de06c0b75809911713664d7832803183a31a0d941da",
       "reference_sha256": "8df9ca36ac2abe97c33c82c79f41a9cfa85ff29fb89013f9b77ed3ee86898521"
+    },
+    {
+      "source": "operator_template_return.cpp",
+      "source_sha256": "88cc91f5bcab4d71bce188fa443725c3d5585f04af49c8c1b8e9a79d99885e2d",
+      "reference_sha256": "6991b1ea55b36a0df2dc0cfae028be91df18a0a53960c538177df76898b332a4",
+      "capture_date": "2026-10-22"
+    },
+    {
+      "source": "operator_template_loop.cpp",
+      "source_sha256": "4b60bf6b090b7d5921167a032150d651e9e1a26e1a1eca8885341bdcf231ba96",
+      "reference_sha256": "b6797e2167e943e616eb84121af37592b9649208c6dfc03d9c0362076277c0d8",
+      "capture_date": "2026-10-22"
     }
-  ]
+  ],
+  "followup_capture_date": "2026-10-22"
 }

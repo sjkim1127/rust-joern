@@ -5273,6 +5273,23 @@ impl Parser<'_> {
                 i = after;
                 continue;
             }
+            // An operator-function-id (and its template arguments) is one
+            // name. Its punctuation is not a sequence of binary operators.
+            if self.cpp
+                && self.text(i) == "operator"
+                && let Some(after) = self.cpp_expression_name_end(i, end, false)
+                && after > i + 1
+            {
+                // Empty parentheses after a complete operator name are its
+                // argument list, including when the name ends in `>` or `]`.
+                i = after
+                    + if self.text(after) == "(" && self.text(after + 1) == ")" {
+                        2
+                    } else {
+                        0
+                    };
+                continue;
+            }
             if matches!(self.text(i), "@" | "#" | "##")
                 || (!self.cpp
                     && (self.text(i) == "::"
@@ -5680,6 +5697,20 @@ impl Parser<'_> {
         while i < end {
             if let Some(after) = self.lambda_end(i, end) {
                 i = after;
+                continue;
+            }
+            if self.cpp
+                && self.text(i) == "operator"
+                && let Some(after) = self.cpp_expression_name_end(i, end, false)
+                && after > i + 1
+            {
+                // Do not reinterpret the name's `()` or an empty call after
+                // its template-id as a grouped operand. Nonempty arguments
+                // still pass through the ordinary expression checks below.
+                i = after;
+                if self.text(i) == "(" && self.text(i + 1) == ")" {
+                    i += 2;
+                }
                 continue;
             }
             if expression_type_keyword(self.text(i), self.cpp)
@@ -6325,6 +6356,12 @@ impl Parser<'_> {
                     | "<<=" | ">>=" | "==" | "!=" | "<=" | ">=" | "<=>" | "&&" | "||" | "++"
                     | "--" | "," | "->*" | "->" => cursor += 1,
                     _ => return None,
+                }
+                if self.text(cursor) == "<"
+                    && let Some(close) = self.angle_close(cursor, end)
+                    && self.text(close + 1) == "("
+                {
+                    cursor = close + 1;
                 }
             } else {
                 cursor += 1;

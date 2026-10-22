@@ -243,3 +243,115 @@ fn comparison_does_not_capture_a_later_shift_and_cast_as_template_arguments() {
             .any(|n| n.kind == "RETURN" && n.code == "return result+x;")
     );
 }
+
+#[test]
+fn explicit_operator_template_arguments_preserve_calls_and_returns() {
+    let context = "struct Box { int value; }; template<class T> bool operator!=(const T &a,const T &b) { return a.value != b.value; }";
+    for spelling in ["operator!=<>", "operator!=<Box>", "::operator!=<Box>"] {
+        let a = parse(&format!(
+            "{context} int f(Box a,Box b) {{ return {spelling}(a,b); }}"
+        ));
+        let f = function(&a);
+        let id = call(f, spelling.trim_start_matches("::"));
+        assert_eq!(argument_code(f, id, 1), "a");
+        assert_eq!(argument_code(f, id, 2), "b");
+        let returns: Vec<_> = f.cpg.nodes.iter().filter(|n| n.kind == "RETURN").collect();
+        assert_eq!(returns.len(), 1);
+        assert!(path(f, id, returns[0].id));
+        assert!(!f.cpg.nodes.iter().any(|n| n.kind == "UNKNOWN"));
+    }
+}
+
+#[test]
+fn operator_template_call_in_comma_condition_keeps_executable_operands() {
+    let a = parse(
+        "struct Box { int value; }; template<class T> bool operator!=(const T &a,const T &b) { return a.value != b.value; } int touch(); int f(Box a,Box b) { int x; while ((x = operator!=<>(a,b), x && touch())) { a.value--; } return x; }",
+    );
+    let f = function(&a);
+    let comparison = call(f, "operator!=<>");
+    let assignment = call(f, "<operator>.assignment");
+    assert!(path(f, comparison, assignment));
+    assert!(path(f, assignment, call(f, "touch")));
+    call(f, "<operator>.logicalAnd");
+    assert!(!f.cpg.nodes.iter().any(|n| n.kind == "UNKNOWN"));
+}
+
+#[test]
+fn qualified_and_member_operator_templates_keep_nested_arguments() {
+    for (source, spelling, argument) in [
+        (
+            "namespace demo { template<class T> struct Box { int value; }; template<class T> int operator+(Box<T> a,Box<T> b) { return a.value+b.value; } } int f(demo::Box<int> a,demo::Box<int> b) { return demo::operator+<int>(a,b); }",
+            "operator+<int>",
+            "a",
+        ),
+        (
+            "struct Box { template<class T> int operator()(int x) { return x; } }; int f(Box &box,int x) { return box.template operator()<int>(x); }",
+            "operator()<int>",
+            "x",
+        ),
+        (
+            "template<class T> struct Box { int value; }; template<class T> bool operator!=(T a,T b) { return a.value!=b.value; } int f(Box<Box<int>> a,Box<Box<int>> b) { return operator!=<Box<Box<int>>>(a,b); }",
+            "operator!=<Box<Box<int>>>",
+            "a",
+        ),
+    ] {
+        let a = parse(source);
+        let f = function(&a);
+        let id = call(f, spelling);
+        assert_eq!(argument_code(f, id, 1), argument);
+        assert!(f.cpg.nodes.iter().any(|n| n.kind == "RETURN"));
+        assert!(!f.cpg.nodes.iter().any(|n| n.kind == "UNKNOWN"));
+    }
+}
+
+#[test]
+fn operator_call_template_accepts_empty_runtime_arguments() {
+    let a = parse(
+        "struct Box { template<class T> int operator()(); }; int f(Box &box) { return box.template operator()<int>(); }",
+    );
+    let f = function(&a);
+    call(f, "operator()<int>");
+    assert!(f.cpg.nodes.iter().any(|n| n.kind == "RETURN"));
+    assert!(!f.cpg.nodes.iter().any(|n| n.kind == "UNKNOWN"));
+}
+
+#[test]
+fn scopes_inside_operator_template_arguments_do_not_rename_the_callee() {
+    let a = parse(
+        "namespace types { struct Tag { int value; }; } namespace demo { template<class T> int operator+(T a,T b) { return a.value+b.value; } } int f(types::Tag a,types::Tag b) { return demo::operator+<types::Tag>(a,b); }",
+    );
+    let f = function(&a);
+    let id = call(f, "operator+<types::Tag>");
+    assert_eq!(argument_code(f, id, 1), "a");
+    assert_eq!(argument_code(f, id, 2), "b");
+}
+
+#[test]
+fn operator_template_names_do_not_hide_invalid_runtime_arguments() {
+    for source in [
+        "int f(int a,int b) { return operator!=<>(a,,b); }",
+        "int f(int a,int b) { return operator!=<>(a +,b); }",
+        "int f(int a,int b) { return operator!=<>(a @,b); }",
+    ] {
+        let parsed = analyze(
+            source,
+            "bad.cpp",
+            &Options {
+                language: Some("cpp".into()),
+                strict: true,
+                preprocessed: true,
+                ..Options::default()
+            },
+        );
+        if let Ok(analysis) = parsed {
+            let f = function(&analysis);
+            assert!(
+                !f.cpg
+                    .nodes
+                    .iter()
+                    .any(|n| n.kind == "CALL" && n.name.as_deref() == Some("operator!=<>")),
+                "retained malformed call in {source}"
+            );
+        }
+    }
+}

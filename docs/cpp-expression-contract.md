@@ -19,6 +19,15 @@ as separate call operands. Explicitly qualified member targets remain
 unresolved: complete C++ qualified/base lookup is not implemented, and the
 parser must not guess a same-named method on the receiver or a global owner.
 
+An operator-function-id may itself have explicit template arguments, including
+the empty list in `operator!=<>(a, b)` and a member call such as
+`box.template operator()<int>()`. Its operator token and template arguments
+remain part of the callee name, not executable comparisons. Scope separators
+inside those arguments must not rename the call to a template argument's leaf
+type. Expression recovery checks recognize the same name boundary before
+checking runtime operands; they must not discard a valid enclosing return or
+replace its loop condition with a problem expression.
+
 Template parameter `class` keywords and default arguments do not introduce a
 record body or object initializer. Class-template declarations are traversed
 to retain their member declarations and definitions. This does **not** add
