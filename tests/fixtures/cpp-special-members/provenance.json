@@ -1,0 +1,187 @@
+{
+  "captures": [
+    {
+      "source": "isolated_destructor_one.cpp",
+      "source_sha256": "cd0ed3a8d708d03fb31c310f31fbe9bd0e2f5b0c1369bd5871b7eade75943f75",
+      "reference_sha256": "dc5033adbef3b7c23197a5486f250bd39bfad4dd96958758d1022e7028746fb1",
+      "source_manifest_sha256": "96d074cde5d680a1232537e30858dd244a041777fc6cee69bf1f5ac54a42e6ea",
+      "source_record": 3,
+      "original_filename": "CMakeFiles/libninja.dir/src/build_log.ii",
+      "origins": [
+        {
+          "cohort": "prior_250x4",
+          "trace": "37-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "37-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "37-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "37-traces.json"
+        }
+      ],
+      "expected_functions": [
+        "~BuildLog"
+      ],
+      "scope": "unaltered isolated real-source slice; undeclared owner; recovery reference, not C++ validity or complete lifetime effects"
+    },
+    {
+      "source": "isolated_destructor_two.cpp",
+      "source_sha256": "7508da9ab54f8e497cbbcddb614d6fba5197404cd9fafc73dfb7f366c2992f5c",
+      "reference_sha256": "6d7a6e7d046da9b24f220aaf9a8f448482d649b183fb033bdc2a6782e5fda891",
+      "source_manifest_sha256": "96d074cde5d680a1232537e30858dd244a041777fc6cee69bf1f5ac54a42e6ea",
+      "source_record": 18,
+      "original_filename": "CMakeFiles/snappy.dir/snappy.ii",
+      "origins": [
+        {
+          "cohort": "prior_250x4",
+          "trace": "38-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "38-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "38-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "38-traces.json"
+        }
+      ],
+      "expected_functions": [
+        "~CompressionContext"
+      ],
+      "scope": "unaltered isolated real-source slice; undeclared owner; recovery reference, not C++ validity or complete lifetime effects"
+    },
+    {
+      "source": "isolated_constructor.cpp",
+      "source_sha256": "ae4ac5506d799f86b09966f780e443814e71f795fdac0e9da93f2579d541b632",
+      "reference_sha256": "53a100fbd2a2f8dda605af254f28994d86b4c01bd25786f628c3ebabb37635ee",
+      "source_manifest_sha256": "96d074cde5d680a1232537e30858dd244a041777fc6cee69bf1f5ac54a42e6ea",
+      "source_record": 1221,
+      "original_filename": "work/builds/linux/the-powder-toy/O2-noinline/libsimulation.a.p/src_simulation_SimulationData.cpp.ii",
+      "origins": [
+        {
+          "cohort": "prior_250x4",
+          "trace": "17-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "17-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "17-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "17-traces.json"
+        }
+      ],
+      "expected_functions": [
+        "SimulationData"
+      ],
+      "scope": "unaltered isolated real-source slice; undeclared owner; recovery reference, not C++ validity or complete lifetime effects"
+    },
+    {
+      "source": "isolated_empty_destructor.cpp",
+      "source_sha256": "73d5d6277efacc1809beaea36c02bb6e63f7ebca5830e565f9a48280b9305711",
+      "reference_sha256": "9b73486d4d8621c15eb263913bde5df5bdde9f0e6712acba7f2c3c4024e24f2e",
+      "source_manifest_sha256": "96d074cde5d680a1232537e30858dd244a041777fc6cee69bf1f5ac54a42e6ea",
+      "source_record": 29,
+      "original_filename": "O2-noinline/CMakeFiles/snappy.dir/snappy-sinksource.cc.ii",
+      "origins": [
+        {
+          "cohort": "prior_250x4",
+          "trace": "15-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "15-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "15-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "15-traces.json"
+        }
+      ],
+      "expected_functions": [
+        "~UncheckedByteArraySink"
+      ],
+      "scope": "unaltered isolated real-source slice; recovery reference, not C++ validity or complete lifetime effects"
+    },
+    {
+      "source": "isolated_native_destructor.cpp",
+      "source_sha256": "4ff36c92baacc5a436f264fb1023057a0b085d4d8a64256c75165b9a0bbb83fe",
+      "reference_sha256": "965571304558ffd0e38813fae371f9e6602ec2acd29502228a88cfeca93d6292",
+      "source_manifest_sha256": "96d074cde5d680a1232537e30858dd244a041777fc6cee69bf1f5ac54a42e6ea",
+      "source_record": 1203,
+      "original_filename": "preprocessed/00011.ii",
+      "origins": [
+        {
+          "cohort": "prior_250x4",
+          "trace": "30-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "30-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "30-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "30-traces.json"
+        }
+      ],
+      "expected_functions": [
+        "~AmbiguityStream"
+      ],
+      "scope": "unaltered isolated real-source slice; recovery reference, not C++ validity or complete lifetime effects"
+    },
+    {
+      "source": "isolated_conditional_destructor.cpp",
+      "source_sha256": "c8bbee8e8b3e46a80e8f5919b05ade97d75cee8d53b43fd4dc887cc9d0c206e7",
+      "reference_sha256": "bb259ddb7162358504b4b1e6aca345871ee8bf7ad7b67b474a2c26c93b302c9b",
+      "source_manifest_sha256": "96d074cde5d680a1232537e30858dd244a041777fc6cee69bf1f5ac54a42e6ea",
+      "source_record": 1215,
+      "original_filename": "src/ssdb/ssdb_impl.ii",
+      "origins": [
+        {
+          "cohort": "prior_250x4",
+          "trace": "04-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "04-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "04-traces.json"
+        },
+        {
+          "cohort": "prior_250x4",
+          "trace": "04-traces.json"
+        }
+      ],
+      "expected_functions": [
+        "~SSDBImpl"
+      ],
+      "scope": "unaltered isolated real-source slice; recovery reference, not C++ validity or complete lifetime effects"
+    }
+  ],
+  "reference": "unchanged PyJoern 4.0.150.4 / Joern 4.0.150",
+  "dataset": "https://huggingface.co/datasets/sjkim1127/decbench-cpp-qualification/tree/07dd95dbe6214b8a78fc1e4a55961ab515986489",
+  "input_population": "Six isolated source slices from an existing overlapping 1225-input parser pool; not additional independent benchmark samples"
+}

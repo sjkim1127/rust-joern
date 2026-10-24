@@ -1,0 +1,3 @@
+BuildLog::~BuildLog() {
+  Close();
+}
