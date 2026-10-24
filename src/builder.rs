@@ -1,5 +1,6 @@
 use crate::{
     graph::{Diagnostic, Edge, ExternalReference, FunctionGraph, Node, NodeId, PropertyGraph},
+    joern_operators::binary_operator,
     lexer::integer_truth,
     normalize,
     syntax::*,
@@ -1934,23 +1935,14 @@ fn function_pointer_parameter(fullname: &str, argument: usize) -> Option<String>
     None
 }
 
-fn unary_operator(operator: &str, postfix: bool) -> &str {
+// Allocation expressions are Unary nodes in our syntax tree, while CDT has
+// separate new/delete AST classes. Keep that lexical bridge separate from the
+// mechanically translated IASTUnaryExpression operator match.
+fn unary_operator(operator: &str, postfix: bool) -> &'static str {
     match operator {
-        "++" if postfix => "<operator>.postIncrement",
-        "--" if postfix => "<operator>.postDecrement",
-        "++" => "<operator>.preIncrement",
-        "--" => "<operator>.preDecrement",
-        "+" => "<operator>.plus",
-        "-" => "<operator>.minus",
-        "!" => "<operator>.logicalNot",
-        "~" => "<operator>.not",
-        "*" => "<operator>.indirection",
-        "&" => "<operator>.addressOf",
-        "sizeof" => "<operator>.sizeOf",
-        "typeid" => "<operator>.typeOf",
         "new" => "<operator>.new",
         "delete" | "delete[]" => "<operator>.delete",
-        _ => "<operator>.unknown",
+        _ => crate::joern_operators::unary_operator(operator, postfix),
     }
 }
 
@@ -1970,42 +1962,6 @@ fn member_pointer_expression(expression: &Expr) -> bool {
             expression: inner, ..
         } => member_pointer_expression(inner),
         _ => false,
-    }
-}
-
-fn binary_operator(operator: &str) -> &str {
-    match operator {
-        "=" => "<operator>.assignment",
-        "+=" => "<operator>.assignmentPlus",
-        "-=" => "<operator>.assignmentMinus",
-        "*=" => "<operator>.assignmentMultiplication",
-        "/=" => "<operator>.assignmentDivision",
-        "%=" => "<operators>.assignmentModulo",
-        "&=" => "<operators>.assignmentAnd",
-        "|=" => "<operators>.assignmentOr",
-        "^=" => "<operators>.assignmentXor",
-        "<<=" => "<operators>.assignmentShiftLeft",
-        ">>=" => "<operators>.assignmentArithmeticShiftRight",
-        "+" => "<operator>.addition",
-        "-" => "<operator>.subtraction",
-        "*" => "<operator>.multiplication",
-        "/" => "<operator>.division",
-        "%" => "<operator>.modulo",
-        "&" => "<operator>.and",
-        "|" => "<operator>.or",
-        "^" => "<operator>.xor",
-        "&&" => "<operator>.logicalAnd",
-        "||" => "<operator>.logicalOr",
-        "<<" => "<operator>.shiftLeft",
-        ">>" => "<operator>.arithmeticShiftRight",
-        "==" => "<operator>.equals",
-        "!=" => "<operator>.notEquals",
-        "<" => "<operator>.lessThan",
-        ">" => "<operator>.greaterThan",
-        "<=" => "<operator>.lessEqualsThan",
-        ">=" => "<operator>.greaterEqualsThan",
-        ".*" | "->*" => "<operator>.indirectFieldAccess",
-        _ => "<operator>.unknown",
     }
 }
 
