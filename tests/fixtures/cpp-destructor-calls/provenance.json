@@ -1,0 +1,40 @@
+{
+  "captures": [
+    {
+      "source": "explicit-dtor-corpus.cpp",
+      "source_sha256": "c56f09e878c266d6f627954a29391ce0e09773d16e640ebf1e248dfbfe51d799",
+      "reference_sha256": "d7f3efbc58a2d83ac1ffcf7b01076dce6a4fed9c60016709326fd601e424eb6e",
+      "kind": "unchanged real Snappy isolated source slice"
+    },
+    {
+      "source": "declared-destructor-controls.cpp",
+      "source_sha256": "cc6852b8a7ccecc9132aca10bf5acb99b1fd962b470417e48b7957a0eb423ff5",
+      "reference_sha256": "527a191d351b56ef21cc310d8059a50f1e5bccc823aa0a1ccd1fcc4f2fcc1f05",
+      "kind": "synthetic Clang-accepted syntax/reference control"
+    },
+    {
+      "source": "destructor-effect-controls.cpp",
+      "source_sha256": "19b79366c298a2fe28efbaf7068313c27c4227bdf036257dca734cc801dff2be",
+      "reference_sha256": "c54e7889a449e358156097f7825bc801503854eb52244df1004380ffe5abff92",
+      "kind": "synthetic Clang-accepted effect/reference control"
+    },
+    {
+      "source": "destructor-spelling-controls.cpp",
+      "source_sha256": "36022b0241f6e94690e552cc09a73fd2a5df870e9cf52826835ce6f02b5e4c24",
+      "reference_sha256": "5e495671ac4a4bf30c5d370e9459c4df9ed5ca6dda4d33713a1ebc4e2c905925",
+      "kind": "synthetic Clang-accepted spelling/reference control; whitespace and alternative compl token"
+    }
+  ],
+  "dataset": "https://huggingface.co/datasets/sjkim1127/decbench-cpp-qualification/tree/07dd95dbe6214b8a78fc1e4a55961ab515986489",
+  "corpus_source_index": 32,
+  "corpus_original_filename": "O2-noinline/CMakeFiles/snappy.dir/snappy.cc.ii",
+  "reference_backend": "unchanged PyJoern 4.0.150.4 / Joern 4.0.150",
+  "rejected_controls": [
+    {
+      "source": "invalid-arguments.cpp",
+      "source_sha256": "34e27537bd23070a6575ee1f5de9931dc60ae2b2eda3944a33fff1cb55e1f247",
+      "reference_sha256": "878d2166977167f847f3f25504994f4f135c5f17249de6ef4a92fc6f85bfcc7c",
+      "kind": "synthetic invalid C++ control; Clang rejects arguments to a destructor; original Joern recovers method f; Rust strict mode deliberately rejects"
+    }
+  ]
+}
