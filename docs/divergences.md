@@ -20,6 +20,10 @@ signature. Unsupported conversions, CV/ref argument constraints or ambiguous
 selection retain `Class.<operator>():<unresolvedSignature>` with `ANY`, even
 where CDT resolves a signature. The call and all executable operands remain.
 Qualified/inherited/aliased callable lookup remains bounded separately.
+The [own-field follow-up](eval/joern_field_callable_port_2026-10-25.md) extends
+this evidence to unique ordinary fields; bases, unions, CV/alias fields and
+ambiguous declarations keep the previous unresolved path. That path can differ
+from CDT even for valid input; there is no implicit validity/eligibility claim.
 
 **Why:** arity or a coincidentally named global function is not overload proof.
 This is conservative missing type/binding information, not a syntax error or

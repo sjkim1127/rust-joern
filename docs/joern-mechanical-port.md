@@ -143,3 +143,12 @@ are distinct. The [port report](eval/joern_callable_port_2026-10-25.md) and
 remaining gaps. New original-reference capture profiles optionally compare
 CALL result types and operand occurrence locations, without changing the
 previous default contracts.
+
+## Fourth batch: own-field type evidence and callable connection
+
+Parser-owned record facts now reach the builder's read-only callable query.
+Declared own fields compose with bounded nested/dereferenced/indexed receivers
+and scalar field arguments. Unique owner/field evidence and signature evidence
+remain separate. [The field-callable report](eval/joern_field_callable_port_2026-10-25.md)
+records original 11-METHOD/12-CALL controls, 10 public CFGs, regression replays
+and explicit exclusions, including the existing fixed-array `<clinit>` gap.

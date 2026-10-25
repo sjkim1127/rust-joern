@@ -107,6 +107,7 @@ pub fn parse_preprocessed(
             .union(&parser.class_scopes)
             .cloned()
             .collect(),
+        record_fields: parser.class_fields,
         functions,
         global_expressions: parser.global_expressions,
         retained_macro_calls,
@@ -718,7 +719,7 @@ struct Parser<'a> {
     extern_c: bool,
     extern_c_names: HashSet<String>,
     class_scopes: HashSet<String>,
-    class_fields: HashMap<String, Vec<(String, String)>>,
+    class_fields: HashMap<String, RecordFields>,
     scalar_constructor_classes: HashSet<String>,
     constructor_initializers: bool,
     function_fields: Vec<(String, String)>,
@@ -1167,14 +1168,20 @@ impl Parser<'_> {
                     if self.cpp && class.is_some() && !nested.is_empty() {
                         self.class_scopes.insert(nested.clone());
                         let close = self.matching(cursor, self.limit).unwrap_or(self.limit);
-                        let fields = self.collect_class_fields(cursor + 1, close);
+                        let mut record = self.collect_class_fields(cursor + 1, close);
+                        record.callable_lookup &= !(start..cursor)
+                            .any(|i| matches!(self.text(i), ":" | "union" | "template"));
+                        let fields = record.implicit_fields();
                         self.scalar_constructor_classes.remove(&nested);
                         if self.constructor_initializers
                             && self.scalar_constructor_class(start, cursor, close, &fields)
                         {
                             self.scalar_constructor_classes.insert(nested.clone());
                         }
-                        self.class_fields.insert(nested.clone(), fields);
+                        if self.class_fields.contains_key(&nested) {
+                            record.callable_lookup = false;
+                        }
+                        self.class_fields.insert(nested.clone(), record);
                     }
                     let previous_linkage = self.extern_c;
                     let outer_variables = class.map(|_| self.variables.clone());
@@ -1544,8 +1551,11 @@ impl Parser<'_> {
         Some(header)
     }
 
-    fn collect_class_fields(&self, start: usize, end: usize) -> Vec<(String, String)> {
-        let mut fields = Vec::new();
+    fn collect_class_fields(&self, start: usize, end: usize) -> RecordFields {
+        let mut record = RecordFields {
+            callable_lookup: true,
+            ..RecordFields::default()
+        };
         let mut at = start;
         while at < end {
             if matches!(self.text(at), "public" | "private" | "protected")
@@ -1566,6 +1576,14 @@ impl Parser<'_> {
                 break;
             }
             let method = self.function_header(from, at).is_some();
+            if (from..at).any(|i| {
+                matches!(
+                    self.text(i),
+                    "typedef" | "using" | "struct" | "class" | "union" | "enum"
+                )
+            }) {
+                record.callable_lookup = false;
+            }
             if self.text(at) == "{" {
                 at = self.matching(at, end).map_or(end, |close| close + 1);
                 if method {
@@ -1586,16 +1604,30 @@ impl Parser<'_> {
                 let base = self.specifier_end(from, at);
                 for (a, b) in self.split_ranges(base, at, ",") {
                     if let (Some(name), _) = self.declarator_name(a, b) {
-                        fields.push((
-                            self.text(name).into(),
-                            self.declarator_type(from, base, Some(name), b),
-                        ));
+                        let type_name = self.declarator_type(from, base, Some(name), b);
+                        record.fields.push(RecordField {
+                            name: self.text(name).into(),
+                            binding_type: if self.type_aliases.contains_key(
+                                type_name
+                                    .split(['*', '&', '[', '('])
+                                    .next()
+                                    .unwrap_or("")
+                                    .trim(),
+                            ) {
+                                "ANY".into()
+                            } else {
+                                self.binding_type(&type_name)
+                            },
+                            type_name,
+                            cv_qualified: (from..name)
+                                .any(|i| matches!(self.text(i), "const" | "volatile")),
+                        });
                     }
                 }
             }
             at += 1;
         }
-        fields
+        record
     }
 
     fn scalar_constructor_class(
@@ -2208,7 +2240,7 @@ impl Parser<'_> {
             qualified_name
                 .rsplit_once("::")
                 .and_then(|(owner, _)| self.class_fields.get(owner))
-                .cloned()
+                .map(RecordFields::implicit_fields)
                 .unwrap_or_default()
         };
         let full_name = if duplicate_binding {

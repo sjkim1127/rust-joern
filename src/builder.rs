@@ -73,6 +73,7 @@ impl Fragment {
 pub struct CallBindings<'a> {
     pub methods: &'a HashMap<String, Vec<&'a Function>>,
     pub known_types: &'a HashSet<String>,
+    pub record_fields: &'a HashMap<String, RecordFields>,
 }
 
 struct Builder<'a> {
@@ -84,6 +85,7 @@ struct Builder<'a> {
     functions: &'a HashSet<String>,
     methods: &'a HashMap<String, Vec<&'a Function>>,
     known_types: &'a HashSet<String>,
+    record_fields: &'a HashMap<String, RecordFields>,
     function_pointers: HashSet<NodeId>,
     cv_bindings: HashSet<NodeId>,
     closures: HashMap<NodeId, Closure>,
@@ -123,6 +125,7 @@ pub fn build(
         functions: known_functions,
         methods: bindings.methods,
         known_types: bindings.known_types,
+        record_fields: bindings.record_fields,
         function_pointers: HashSet::new(),
         cv_bindings: HashSet::new(),
         closures: HashMap::new(),
@@ -1310,7 +1313,10 @@ impl Builder<'_> {
         }
         let compact = ty.split_whitespace().collect::<String>();
         let owner = compact.trim_end_matches('&');
-        if owner.contains(['*', '[']) || !self.known_types.contains(owner) {
+        if owner.contains(['*', '['])
+            || !(self.known_types.contains(owner)
+                || self.known_types.contains(&owner.replace('.', "::")))
+        {
             return None;
         }
         let owner = owner.replace("::", ".");
@@ -1415,6 +1421,33 @@ impl Builder<'_> {
                 let (id, ty) = self.binding(name)?;
                 (!self.cv_bindings.contains(id)).then(|| ty.clone())
             }
+            ExprKind::Member {
+                base,
+                name,
+                indirect,
+            } => {
+                if name.contains("::") {
+                    return None;
+                }
+                let ty = self.callable_receiver_type(base)?;
+                let compact = ty.split_whitespace().collect::<String>();
+                let object = compact.trim_end_matches('&');
+                let owner = if *indirect {
+                    object.strip_suffix('*')?
+                } else {
+                    object
+                };
+                let record = self.record_fields.get(&owner.replace('.', "::"))?;
+                if !record.callable_lookup {
+                    return None;
+                }
+                let mut matches = record.fields.iter().filter(|field| field.name == *name);
+                let field = matches.next()?;
+                if matches.next().is_some() || field.cv_qualified {
+                    return None;
+                }
+                Some(field.binding_type.clone())
+            }
             ExprKind::Bracketed(inner)
             | ExprKind::Generated {
                 expression: inner, ..
@@ -1443,6 +1476,7 @@ impl Builder<'_> {
     }
     fn callable_operand_type(&self, expression: &Expr) -> Option<String> {
         match &expression.kind {
+            ExprKind::Member { .. } => self.callable_receiver_type(expression),
             ExprKind::Bracketed(inner)
             | ExprKind::Generated {
                 expression: inner, ..
@@ -2446,6 +2480,7 @@ mod tests {
                     let bindings = super::CallBindings {
                         methods: &methods,
                         known_types: &unit.known_type_names,
+                        record_fields: &unit.record_fields,
                     };
                     let (graph, diagnostics) = std::thread::scope(|scope| {
                         std::thread::Builder::new()

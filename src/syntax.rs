@@ -238,10 +238,37 @@ pub struct ParseDiagnostic {
     pub span: Span,
 }
 
+/// Source declaration evidence, separate from graph/display type hints.
+#[derive(Clone, Debug)]
+pub struct RecordField {
+    pub name: String,
+    pub type_name: String,
+    pub binding_type: String,
+    pub cv_qualified: bool,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RecordFields {
+    pub fields: Vec<RecordField>,
+    /// Direct ordinary record only: no bases, local type declarations, union,
+    /// template or repeated definition whose lookup would require CDT semantics.
+    pub callable_lookup: bool,
+}
+
+impl RecordFields {
+    pub fn implicit_fields(&self) -> Vec<(String, String)> {
+        self.fields
+            .iter()
+            .map(|field| (field.name.clone(), field.type_name.clone()))
+            .collect()
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct TranslationUnit {
     /// Explicit source/context declarations, not guessed parameter spellings.
     pub known_type_names: std::collections::HashSet<String>,
+    pub record_fields: std::collections::HashMap<String, RecordFields>,
     pub functions: Vec<Function>,
     pub global_expressions: Vec<Expr>,
     pub retained_macro_calls: Vec<RetainedMacroCall>,

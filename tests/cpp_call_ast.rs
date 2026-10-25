@@ -388,3 +388,148 @@ fn callable_objects_do_not_reclassify_lambda_or_function_pointer_receivers() {
         assert!(edge(f, id, "ARGUMENT", Some("0")).is_none());
     }
 }
+
+#[test]
+fn field_callable_uses_lexically_qualified_declaration_and_whole_field_receiver() {
+    let analysis = parse(
+        "struct C { long operator()(long); }; namespace N { struct C { int operator()(int); }; struct H { C fn; int value; }; } int f(N::H& h) { return h.fn(h.value); }",
+    );
+    let f = method(&analysis, "f");
+    let id = call(f, "<operator>()");
+    assert_eq!(
+        f.cpg.nodes[id as usize].method_full_name.as_deref(),
+        Some("N.C.<operator>():int(int)")
+    );
+    assert_eq!(f.cpg.nodes[id as usize].type_name.as_deref(), Some("int"));
+    let receiver = edge(f, id, "RECEIVER", None).unwrap();
+    assert_eq!(edge(f, id, "ARGUMENT", Some("0")), Some(receiver));
+    assert_eq!(f.cpg.nodes[receiver as usize].code, "h.fn");
+    assert_eq!(
+        f.cpg.nodes[receiver as usize].name.as_deref(),
+        Some("<operator>.fieldAccess")
+    );
+}
+
+#[test]
+fn nested_pointer_array_field_callables_keep_effect_order_and_single_roots() {
+    for callee in [
+        "h[tick()].inner.fn",
+        "h->inner.fn",
+        "(*h->inner.pointer)",
+        "h->inner.array[tick()]",
+    ] {
+        let source = format!(
+            "struct C {{ int operator()(int); }}; struct H {{ C fn; C* pointer; C array[2]; }}; struct Outer {{ H inner; }}; int tick(); int f(Outer* h) {{ return {callee}(tick()); }}"
+        );
+        let analysis = parse(&source);
+        let f = method(&analysis, "f");
+        let id = call(f, "<operator>()");
+        assert_eq!(
+            f.cpg.nodes[id as usize].method_full_name.as_deref(),
+            Some("C.<operator>():int(int)")
+        );
+        let receiver = edge(f, id, "RECEIVER", None).unwrap();
+        assert_eq!(edge(f, id, "ARGUMENT", Some("0")), Some(receiver));
+        let argument = edge(f, id, "ARGUMENT", Some("1")).unwrap();
+        let ticks: Vec<_> = f
+            .cpg
+            .nodes
+            .iter()
+            .filter(|n| n.kind == "CALL" && n.name.as_deref() == Some("tick"))
+            .collect();
+        assert_eq!(ticks.len(), if callee.contains("tick") { 2 } else { 1 });
+        if ticks.len() == 2 {
+            let first = ticks.iter().find(|n| n.id != argument).unwrap().id;
+            assert!(reaches(f, first, receiver, None));
+        }
+        assert!(reaches(f, receiver, argument, None));
+        assert!(reaches(f, argument, id, None));
+        assert_eq!(
+            f.cpg
+                .edges
+                .iter()
+                .filter(|e| e.source == id && e.target == receiver && e.kind == "AST")
+                .count(),
+            1
+        );
+    }
+}
+
+#[test]
+fn field_callable_cv_alias_inheritance_and_ambiguous_records_abstain() {
+    for (declarations, parameter, callee) in [
+        ("struct H { const C fn; };", "H& h", "h.fn"),
+        ("struct H { C fn; };", "const H& h", "h.fn"),
+        ("struct B { C fn; }; struct H : B {};", "H& h", "h.fn"),
+        (
+            "struct B { int x; }; struct H : B { C fn; };",
+            "H& h",
+            "h.fn",
+        ),
+        (
+            "using Alias = const C; struct H { Alias fn; };",
+            "H& h",
+            "h.fn",
+        ),
+        ("struct H { C fn; C fn; };", "H& h", "h.fn"),
+        ("struct H { C fn; }; struct H { C fn; };", "H& h", "h.fn"),
+        ("struct H { using Alias = C; Alias fn; };", "H& h", "h.fn"),
+        ("union H { C fn; int value; };", "H& h", "h.fn"),
+        ("struct H { int fn; };", "H& h", "h.fn"),
+        ("struct H { C* fn; };", "H& h", "h.fn"),
+    ] {
+        let analysis = parse(&format!(
+            "struct C {{ int operator()(int); }}; {declarations} int f({parameter}) {{ return {callee}(1); }}"
+        ));
+        let f = method(&analysis, "f");
+        assert!(
+            !f.cpg.nodes.iter().any(|n| n
+                .method_full_name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("C.<operator>():"))),
+            "unproven field bound in {declarations}"
+        );
+    }
+}
+
+#[test]
+fn field_callable_mismatched_argument_has_owner_but_no_guessed_overload() {
+    let analysis = parse(
+        "struct C { int operator()(int); }; struct H { C fn; double value; }; int f(H& h) { return h.fn(h.value); }",
+    );
+    let f = method(&analysis, "f");
+    let id = call(f, "<operator>()");
+    assert_eq!(
+        f.cpg.nodes[id as usize].method_full_name.as_deref(),
+        Some("C.<operator>():<unresolvedSignature>")
+    );
+    assert_eq!(f.cpg.nodes[id as usize].type_name.as_deref(), Some("ANY"));
+}
+
+#[test]
+fn field_callable_receiver_can_be_bypassed_without_evaluating_index_or_argument() {
+    let analysis = parse(
+        "struct C { int operator()(int); }; struct H { C fn; }; int tick(); int f(bool run, H* h) { return run && h[tick()].fn(tick()); }",
+    );
+    let f = method(&analysis, "f");
+    let id = call(f, "<operator>()");
+    let receiver = edge(f, id, "RECEIVER", None).unwrap();
+    let logical = call(f, "<operator>.logicalAnd");
+    let condition = f
+        .cpg
+        .nodes
+        .iter()
+        .find(|n| n.kind == "IDENTIFIER" && n.name.as_deref() == Some("run"))
+        .unwrap()
+        .id;
+    assert!(reaches(f, condition, logical, Some(receiver)));
+    assert!(reaches(f, condition, receiver, None));
+    assert_eq!(
+        f.cpg
+            .nodes
+            .iter()
+            .filter(|n| n.kind == "CALL" && n.name.as_deref() == Some("tick"))
+            .count(),
+        2
+    );
+}

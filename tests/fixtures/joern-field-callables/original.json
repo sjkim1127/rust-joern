@@ -1,0 +1,550 @@
+{
+  "schema": "joern-call-ast-contract-v1",
+  "generator": "Original Joern v4.0.150 bundled with PyJoern 4.0.150.4",
+  "source_sha256": "192329850b6257e86529a148a4dc6e4f51f763d92382dca1927e5ad32ee992ad",
+  "capture_sha256": "2b7017b294c34caa687bbec7a59f87016053c434561cb2a05f88bf1ad2684178",
+  "raw_log_sha256": "f5a2570774f79689205da417afa33ce8cfbf7d9c55b666c1693ab2755db579f8",
+  "projector_sha256": "b0197cd3f887b6a6f957841e5a7c4b27e479ea2ccfe8a955e5f67b7bca128a3b",
+  "bounds": "Call identity/result types, operand roles and AST ownership; excludes operand types, dispatch/order properties, DDG and execution parity",
+  "methods": [
+    {
+      "fullname": "N.Callable.():int(int)",
+      "line": 2,
+      "calls": []
+    },
+    {
+      "fullname": "N.Holder.method:int(int)",
+      "line": 3,
+      "calls": []
+    },
+    {
+      "fullname": "dereferenced:int(N.Holder&)",
+      "line": 10,
+      "calls": [
+        {
+          "code": "(*a.pointer)(4)",
+          "name": "<operator>()",
+          "line": 10,
+          "column": 41,
+          "method_full_name": "N.Callable.<operator>():int(int)",
+          "arguments": [
+            {
+              "index": 0,
+              "node": {
+                "kind": "CALL",
+                "code": "*a.pointer",
+                "name": "<operator>.indirection",
+                "line": 10,
+                "column": 42
+              }
+            },
+            {
+              "index": 1,
+              "node": {
+                "kind": "LITERAL",
+                "code": "4",
+                "name": "",
+                "line": 10,
+                "column": 54
+              }
+            }
+          ],
+          "receiver": {
+            "kind": "CALL",
+            "code": "*a.pointer",
+            "name": "<operator>.indirection",
+            "line": 10,
+            "column": 42
+          },
+          "shared_base_receiver": true,
+          "ast_children": [
+            {
+              "kind": "CALL",
+              "code": "*a.pointer",
+              "name": "<operator>.indirection",
+              "line": 10,
+              "column": 42
+            },
+            {
+              "kind": "LITERAL",
+              "code": "4",
+              "name": "",
+              "line": 10,
+              "column": 54
+            }
+          ],
+          "type_name": "int"
+        }
+      ]
+    },
+    {
+      "fullname": "direct:int(N.Holder&)",
+      "line": 7,
+      "calls": [
+        {
+          "code": "a.field(1)",
+          "name": "<operator>()",
+          "line": 7,
+          "column": 35,
+          "method_full_name": "N.Callable.<operator>():int(int)",
+          "arguments": [
+            {
+              "index": 0,
+              "node": {
+                "kind": "CALL",
+                "code": "a.field",
+                "name": "<operator>.fieldAccess",
+                "line": 7,
+                "column": 35
+              }
+            },
+            {
+              "index": 1,
+              "node": {
+                "kind": "LITERAL",
+                "code": "1",
+                "name": "",
+                "line": 7,
+                "column": 43
+              }
+            }
+          ],
+          "receiver": {
+            "kind": "CALL",
+            "code": "a.field",
+            "name": "<operator>.fieldAccess",
+            "line": 7,
+            "column": 35
+          },
+          "shared_base_receiver": true,
+          "ast_children": [
+            {
+              "kind": "LITERAL",
+              "code": "1",
+              "name": "",
+              "line": 7,
+              "column": 43
+            },
+            {
+              "kind": "CALL",
+              "code": "a.field",
+              "name": "<operator>.fieldAccess",
+              "line": 7,
+              "column": 35
+            }
+          ],
+          "type_name": "int"
+        }
+      ]
+    },
+    {
+      "fullname": "field_argument:int(N.Holder&)",
+      "line": 13,
+      "calls": [
+        {
+          "code": "a.field(a.scalar)",
+          "name": "<operator>()",
+          "line": 13,
+          "column": 43,
+          "method_full_name": "N.Callable.<operator>():int(int)",
+          "arguments": [
+            {
+              "index": 0,
+              "node": {
+                "kind": "CALL",
+                "code": "a.field",
+                "name": "<operator>.fieldAccess",
+                "line": 13,
+                "column": 43
+              }
+            },
+            {
+              "index": 1,
+              "node": {
+                "kind": "CALL",
+                "code": "a.scalar",
+                "name": "<operator>.fieldAccess",
+                "line": 13,
+                "column": 51
+              }
+            }
+          ],
+          "receiver": {
+            "kind": "CALL",
+            "code": "a.field",
+            "name": "<operator>.fieldAccess",
+            "line": 13,
+            "column": 43
+          },
+          "shared_base_receiver": true,
+          "ast_children": [
+            {
+              "kind": "CALL",
+              "code": "a.field",
+              "name": "<operator>.fieldAccess",
+              "line": 13,
+              "column": 43
+            },
+            {
+              "kind": "CALL",
+              "code": "a.scalar",
+              "name": "<operator>.fieldAccess",
+              "line": 13,
+              "column": 51
+            }
+          ],
+          "type_name": "int"
+        }
+      ]
+    },
+    {
+      "fullname": "indexed:int(N.Holder&)",
+      "line": 11,
+      "calls": [
+        {
+          "code": "tick()",
+          "name": "tick",
+          "line": 11,
+          "column": 44,
+          "method_full_name": "tick:int()",
+          "arguments": [],
+          "receiver": null,
+          "shared_base_receiver": false,
+          "ast_children": [],
+          "type_name": "int"
+        },
+        {
+          "code": "tick()",
+          "name": "tick",
+          "line": 11,
+          "column": 52,
+          "method_full_name": "tick:int()",
+          "arguments": [],
+          "receiver": null,
+          "shared_base_receiver": false,
+          "ast_children": [],
+          "type_name": "int"
+        },
+        {
+          "code": "a.array[tick()](tick())",
+          "name": "<operator>()",
+          "line": 11,
+          "column": 36,
+          "method_full_name": "N.Callable.<operator>():int(int)",
+          "arguments": [
+            {
+              "index": 0,
+              "node": {
+                "kind": "CALL",
+                "code": "a.array[tick()]",
+                "name": "<operator>.indirectIndexAccess",
+                "line": 11,
+                "column": 36
+              }
+            },
+            {
+              "index": 1,
+              "node": {
+                "kind": "CALL",
+                "code": "tick()",
+                "name": "tick",
+                "line": 11,
+                "column": 52
+              }
+            }
+          ],
+          "receiver": {
+            "kind": "CALL",
+            "code": "a.array[tick()]",
+            "name": "<operator>.indirectIndexAccess",
+            "line": 11,
+            "column": 36
+          },
+          "shared_base_receiver": true,
+          "ast_children": [
+            {
+              "kind": "CALL",
+              "code": "a.array[tick()]",
+              "name": "<operator>.indirectIndexAccess",
+              "line": 11,
+              "column": 36
+            },
+            {
+              "kind": "CALL",
+              "code": "tick()",
+              "name": "tick",
+              "line": 11,
+              "column": 52
+            }
+          ],
+          "type_name": "int"
+        }
+      ]
+    },
+    {
+      "fullname": "indirect:int(N.Holder*)",
+      "line": 8,
+      "calls": [
+        {
+          "code": "a->field(2)",
+          "name": "<operator>()",
+          "line": 8,
+          "column": 37,
+          "method_full_name": "N.Callable.<operator>():int(int)",
+          "arguments": [
+            {
+              "index": 0,
+              "node": {
+                "kind": "CALL",
+                "code": "a->field",
+                "name": "<operator>.indirectFieldAccess",
+                "line": 8,
+                "column": 37
+              }
+            },
+            {
+              "index": 1,
+              "node": {
+                "kind": "LITERAL",
+                "code": "2",
+                "name": "",
+                "line": 8,
+                "column": 46
+              }
+            }
+          ],
+          "receiver": {
+            "kind": "CALL",
+            "code": "a->field",
+            "name": "<operator>.indirectFieldAccess",
+            "line": 8,
+            "column": 37
+          },
+          "shared_base_receiver": true,
+          "ast_children": [
+            {
+              "kind": "LITERAL",
+              "code": "2",
+              "name": "",
+              "line": 8,
+              "column": 46
+            },
+            {
+              "kind": "CALL",
+              "code": "a->field",
+              "name": "<operator>.indirectFieldAccess",
+              "line": 8,
+              "column": 37
+            }
+          ],
+          "type_name": "int"
+        }
+      ]
+    },
+    {
+      "fullname": "nested:int(N.Nested&)",
+      "line": 9,
+      "calls": [
+        {
+          "code": "a.inner.field(3)",
+          "name": "<operator>()",
+          "line": 9,
+          "column": 35,
+          "method_full_name": "N.Callable.<operator>():int(int)",
+          "arguments": [
+            {
+              "index": 0,
+              "node": {
+                "kind": "CALL",
+                "code": "a.inner.field",
+                "name": "<operator>.fieldAccess",
+                "line": 9,
+                "column": 35
+              }
+            },
+            {
+              "index": 1,
+              "node": {
+                "kind": "LITERAL",
+                "code": "3",
+                "name": "",
+                "line": 9,
+                "column": 49
+              }
+            }
+          ],
+          "receiver": {
+            "kind": "CALL",
+            "code": "a.inner.field",
+            "name": "<operator>.fieldAccess",
+            "line": 9,
+            "column": 35
+          },
+          "shared_base_receiver": true,
+          "ast_children": [
+            {
+              "kind": "LITERAL",
+              "code": "3",
+              "name": "",
+              "line": 9,
+              "column": 49
+            },
+            {
+              "kind": "CALL",
+              "code": "a.inner.field",
+              "name": "<operator>.fieldAccess",
+              "line": 9,
+              "column": 35
+            }
+          ],
+          "type_name": "int"
+        }
+      ]
+    },
+    {
+      "fullname": "ordinary:int(N.Holder&)",
+      "line": 14,
+      "calls": [
+        {
+          "code": "a.method(1)",
+          "name": "method",
+          "line": 14,
+          "column": 37,
+          "method_full_name": "N.Holder.method:int(int)",
+          "arguments": [
+            {
+              "index": 0,
+              "node": {
+                "kind": "IDENTIFIER",
+                "code": "a",
+                "name": "a",
+                "line": 14,
+                "column": 37
+              }
+            },
+            {
+              "index": 1,
+              "node": {
+                "kind": "LITERAL",
+                "code": "1",
+                "name": "",
+                "line": 14,
+                "column": 46
+              }
+            }
+          ],
+          "receiver": null,
+          "shared_base_receiver": false,
+          "ast_children": [
+            {
+              "kind": "LITERAL",
+              "code": "1",
+              "name": "",
+              "line": 14,
+              "column": 46
+            },
+            {
+              "kind": "IDENTIFIER",
+              "code": "a",
+              "name": "a",
+              "line": 14,
+              "column": 37
+            }
+          ],
+          "type_name": "int"
+        }
+      ]
+    },
+    {
+      "fullname": "owner_index:int(N.Holder*)",
+      "line": 12,
+      "calls": [
+        {
+          "code": "tick()",
+          "name": "tick",
+          "line": 12,
+          "column": 42,
+          "method_full_name": "tick:int()",
+          "arguments": [],
+          "receiver": null,
+          "shared_base_receiver": false,
+          "ast_children": [],
+          "type_name": "int"
+        },
+        {
+          "code": "tick()",
+          "name": "tick",
+          "line": 12,
+          "column": 56,
+          "method_full_name": "tick:int()",
+          "arguments": [],
+          "receiver": null,
+          "shared_base_receiver": false,
+          "ast_children": [],
+          "type_name": "int"
+        },
+        {
+          "code": "a[tick()].field(tick())",
+          "name": "<operator>()",
+          "line": 12,
+          "column": 40,
+          "method_full_name": "N.Callable.<operator>():int(int)",
+          "arguments": [
+            {
+              "index": 0,
+              "node": {
+                "kind": "CALL",
+                "code": "a[tick()].field",
+                "name": "<operator>.fieldAccess",
+                "line": 12,
+                "column": 40
+              }
+            },
+            {
+              "index": 1,
+              "node": {
+                "kind": "CALL",
+                "code": "tick()",
+                "name": "tick",
+                "line": 12,
+                "column": 56
+              }
+            }
+          ],
+          "receiver": {
+            "kind": "CALL",
+            "code": "a[tick()].field",
+            "name": "<operator>.fieldAccess",
+            "line": 12,
+            "column": 40
+          },
+          "shared_base_receiver": true,
+          "ast_children": [
+            {
+              "kind": "CALL",
+              "code": "a[tick()].field",
+              "name": "<operator>.fieldAccess",
+              "line": 12,
+              "column": 40
+            },
+            {
+              "kind": "CALL",
+              "code": "tick()",
+              "name": "tick",
+              "line": 12,
+              "column": 56
+            }
+          ],
+          "type_name": "int"
+        }
+      ]
+    },
+    {
+      "fullname": "tick:int()",
+      "line": 6,
+      "calls": []
+    }
+  ],
+  "call_types": true,
+  "operand_positions": true
+}

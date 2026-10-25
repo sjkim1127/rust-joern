@@ -190,6 +190,7 @@ fn build_source(source: &str, filename: &str, options: &Options) -> Result<Built
     let call_bindings = builder::CallBindings {
         methods: &methods,
         known_types: &unit.known_type_names,
+        record_fields: &unit.record_fields,
     };
     let mut built: Vec<_> = unit
         .functions
