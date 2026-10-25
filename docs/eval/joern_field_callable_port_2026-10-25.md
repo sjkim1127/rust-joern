@@ -110,3 +110,7 @@ PYTHON scripts/compare_qualification.py --baseline BASELINE_RUN \
 Use separate fresh runs with `--joern-loop-conditions` for that profile. The
 upstream source controls use their own frozen INPUTS manifest. No upstream PR
 or external maintainer message accompanies this research-fork checkpoint.
+
+Follow-up checkpoint: the [record initializer port](joern_record_init_port_2026-10-25.md)
+subsequently closes the fixed-array `<clinit>` gap above on the same exact
+control bytes. The measurements in this report describe its earlier baseline.

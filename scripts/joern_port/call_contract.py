@@ -20,7 +20,11 @@ def digest(data: bytes) -> str:
 
 
 def project(
-    method: dict, *, call_types: bool = False, operand_positions: bool = False
+    method: dict,
+    *,
+    call_types: bool = False,
+    operand_positions: bool = False,
+    include_intrinsics: bool = False,
 ) -> dict:
     graph = method["cpg"]
     nodes = {node["id"]: node for node in graph["nodes"]}
@@ -42,7 +46,8 @@ def project(
         name = node.get("name", "")
         if (
             node["kind"] != "CALL"
-            or name.startswith(("<operator>.", "<operators>."))
+            or not include_intrinsics
+            and name.startswith(("<operator>.", "<operators>."))
             and name != "<operator>.pointerCall"
         ):
             continue
@@ -96,6 +101,7 @@ def compare(reference: dict, analysis: dict) -> list[dict]:
             m,
             call_types=reference.get("call_types", False),
             operand_positions=reference.get("operand_positions", False),
+            include_intrinsics=reference.get("include_intrinsics", False),
         )
         for m in analysis["functions"]
     ]
@@ -140,6 +146,11 @@ def main():
         action="store_true",
         help="Preserve argument/receiver occurrence locations, including identical spellings",
     )
+    parser.add_argument(
+        "--include-intrinsics",
+        action="store_true",
+        help="Also compare intrinsic CALLs; default contracts unchanged",
+    )
     args = parser.parse_args()
     capture = (
         Path(__file__).resolve().parents[2] / "tests/fixtures/ddg-lambdas/capture.sc"
@@ -155,7 +166,12 @@ def main():
     ):
         raise ValueError("empty/wrong-source original capture")
     projected = [
-        project(m, call_types=args.call_types, operand_positions=args.operand_positions)
+        project(
+            m,
+            call_types=args.call_types,
+            operand_positions=args.operand_positions,
+            include_intrinsics=args.include_intrinsics,
+        )
         for m in methods
     ]
     keys = [(m["fullname"], m["line"]) for m in projected]
@@ -171,6 +187,8 @@ def main():
         "bounds": "Call identity, operand roles and AST ownership; excludes type inference, dispatch property, DDG and execution parity",
         "methods": sorted(projected, key=lambda m: (m["fullname"], m["line"])),
     }
+    if args.include_intrinsics:
+        result["include_intrinsics"] = True
     if args.call_types:
         result["call_types"] = True
         result["bounds"] = (

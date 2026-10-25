@@ -28,6 +28,8 @@ pub struct Function {
     /// CDT stores a lambda method separately from the enclosing method AST.
     pub lambda: bool,
     pub is_static: bool,
+    /// c2cpg type-level call container; not C++ runtime constructor semantics.
+    pub is_type_initializer: bool,
     /// Explicit virtual declaration evidence; no inferred hierarchy resolution.
     pub is_virtual: bool,
     /// Lambda bodies are converted in the enclosing lexical scope, after the
@@ -245,11 +247,13 @@ pub struct RecordField {
     pub type_name: String,
     pub binding_type: String,
     pub cv_qualified: bool,
+    pub is_static: bool,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct RecordFields {
     pub fields: Vec<RecordField>,
+    pub initializers: Vec<Expr>,
     /// Direct ordinary record only: no bases, local type declarations, union,
     /// template or repeated definition whose lookup would require CDT semantics.
     pub callable_lookup: bool,
@@ -259,6 +263,7 @@ impl RecordFields {
     pub fn implicit_fields(&self) -> Vec<(String, String)> {
         self.fields
             .iter()
+            .filter(|field| !field.is_static)
             .map(|field| (field.name.clone(), field.type_name.clone()))
             .collect()
     }

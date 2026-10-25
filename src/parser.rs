@@ -1066,7 +1066,10 @@ impl Parser<'_> {
                     self.pos = cursor + 1;
                     continue;
                 }
-                if !is_typedef {
+                if !is_typedef
+                    && (header.is_some()
+                        || !self.collect_record_initializers(prefix, start, cursor))
+                {
                     self.collect_global_expressions(start, cursor);
                 }
                 if !is_typedef && !elaborated {
@@ -1195,6 +1198,11 @@ impl Parser<'_> {
                         self.variables = variables;
                     }
                     self.expect("}");
+                    if self.cpp
+                        && let Some(introducer) = class
+                    {
+                        self.add_record_initializer(&nested, introducer, functions);
+                    }
                     // Names after an anonymous record, including typedef aliases.
                     let after = self.pos;
                     if class.is_some() {
@@ -1216,7 +1224,14 @@ impl Parser<'_> {
                     }
                 } else if let Some(close) = self.matching(cursor, self.limit) {
                     // Aggregate initializer, enum, or non-executable record data.
-                    if !(start..cursor).any(|i| matches!(self.text(i), "=" | "enum"))
+                    let record_brace_initializer = self.cpp
+                        && self.class_scopes.contains(prefix)
+                        && self
+                            .declarator_name(self.specifier_end(start, cursor), cursor)
+                            .0
+                            .is_some();
+                    if !record_brace_initializer
+                        && !(start..cursor).any(|i| matches!(self.text(i), "=" | "enum"))
                         && !self.cdt_problem_function_header(start, cursor)
                     {
                         self.diagnose(
@@ -1225,7 +1240,8 @@ impl Parser<'_> {
                             "unrecognized top-level brace; possible omitted function definition",
                         );
                     }
-                    let aggregate = (start..cursor).any(|i| matches!(self.text(i), "=" | "enum"));
+                    let aggregate = record_brace_initializer
+                        || (start..cursor).any(|i| matches!(self.text(i), "=" | "enum"));
                     self.pos = if aggregate {
                         self.declaration_end(close + 1)
                     } else {
@@ -1233,7 +1249,8 @@ impl Parser<'_> {
                     };
                     if aggregate {
                         self.remember_types(start, self.pos);
-                        if !is_typedef {
+                        if !is_typedef && !self.collect_record_initializers(prefix, start, self.pos)
+                        {
                             self.collect_global_expressions(start, self.pos);
                         }
                     }
@@ -1597,16 +1614,18 @@ impl Parser<'_> {
                 && !(from..at).any(|i| {
                     matches!(
                         self.text(i),
-                        "static" | "typedef" | "using" | "struct" | "class" | "union" | "enum"
+                        "typedef" | "using" | "struct" | "class" | "union" | "enum"
                     )
                 })
             {
                 let base = self.specifier_end(from, at);
+                let is_static = (from..base).any(|i| self.text(i) == "static");
                 for (a, b) in self.split_ranges(base, at, ",") {
                     if let (Some(name), _) = self.declarator_name(a, b) {
                         let type_name = self.declarator_type(from, base, Some(name), b);
                         record.fields.push(RecordField {
                             name: self.text(name).into(),
+                            is_static,
                             binding_type: if self.type_aliases.contains_key(
                                 type_name
                                     .split(['*', '&', '[', '('])
@@ -1628,6 +1647,165 @@ impl Parser<'_> {
             at += 1;
         }
         record
+    }
+
+    fn collect_record_initializers(&mut self, owner: &str, start: usize, end: usize) -> bool {
+        if !self.cpp || !self.class_fields.contains_key(owner) {
+            return false;
+        }
+        if (start..end).any(|i| {
+            matches!(
+                self.text(i),
+                "typedef" | "using" | "class" | "struct" | "union" | "enum"
+            )
+        }) {
+            return false;
+        }
+        let old_function =
+            std::mem::replace(&mut self.function_full_name, owner.replace("::", "."));
+        let old_method = std::mem::replace(
+            &mut self.current_method,
+            format!("{}.<clinit>", owner.replace("::", ".")),
+        );
+        let old_variables = self.variables.clone();
+        let old_types = self.variable_types.clone();
+        let old_closures = self.variable_closures.clone();
+        let mut initializers = Vec::new();
+        let base = self.specifier_end(start, end);
+        for (a, b) in self.split_ranges(base, end, ",") {
+            let header_end = (a..b)
+                .find(|i| matches!(self.text(*i), "=" | "{"))
+                .unwrap_or(b);
+            if self.function_header(a, header_end).is_none()
+                && let (Some(name), _) = self.declarator_name(a, b)
+                && let Some(value) = self.record_declarator_initializer(a, b, name)
+            {
+                initializers.push(value);
+            }
+        }
+        self.function_full_name = old_function;
+        self.current_method = old_method;
+        self.variables = old_variables;
+        self.variable_types = old_types;
+        self.variable_closures = old_closures;
+        self.class_fields
+            .get_mut(owner)
+            .unwrap()
+            .initializers
+            .extend(initializers);
+        true
+    }
+
+    fn record_declarator_initializer(
+        &mut self,
+        start: usize,
+        end: usize,
+        name: usize,
+    ) -> Option<Expr> {
+        // Member declarators are not local allocations. Explicit initializers
+        // take precedence over the array-modifier-only AST, as in c2cpg.
+        let (_, mut at) = self.declarator_name(start, end);
+        let mut bounds = Vec::new();
+        let mut array = false;
+        while at < end {
+            if let Some(after) = self.skip_attribute(at, end) {
+                at = after;
+                continue;
+            }
+            match self.text(at) {
+                "[" => {
+                    array = true;
+                    let close = self.matching(at, end)?;
+                    if close > at + 1 {
+                        bounds.push((at + 1, close));
+                    }
+                    at = close + 1;
+                }
+                "=" | "{" => {
+                    let value_start = at + usize::from(self.text(at) == "=");
+                    let value = self.initializer_expression_range(value_start, end);
+                    return Some(Expr {
+                        span: self.span(start, end),
+                        kind: ExprKind::Binary {
+                            op: "=".into(),
+                            left: Box::new(Expr {
+                                kind: ExprKind::Identifier(self.text(name).into()),
+                                span: self.span(name, name + 1),
+                            }),
+                            right: Box::new(value),
+                        },
+                    });
+                }
+                _ => at += 1,
+            }
+        }
+        array.then(|| Expr {
+            kind: ExprKind::ArrayInitializer(
+                bounds
+                    .into_iter()
+                    .map(|(a, b)| self.expression_range(a, b))
+                    .collect(),
+            ),
+            span: self.span(start, end),
+        })
+    }
+
+    fn add_record_initializer(
+        &self,
+        owner: &str,
+        introducer: usize,
+        functions: &mut Vec<Function>,
+    ) {
+        let Some(record) = self.class_fields.get(owner) else {
+            return;
+        };
+        if record.initializers.is_empty() {
+            return;
+        }
+        let full_name = format!("{}.<clinit>", owner.replace("::", "."));
+        let mut span = self.span(introducer, introducer);
+        span.end_line = 0;
+        functions.push(Function {
+            name: "<clinit>".into(),
+            full_name: full_name.clone(),
+            binding_name: full_name,
+            return_type: "ANY".into(),
+            binding_return_type: "ANY".into(),
+            signature: String::new(),
+            extern_c: false,
+            implicit_this: None,
+            lambda_parent: None,
+            implicit_fields: Vec::new(),
+            member_cv_qualified: false,
+            member_ref_qualified: false,
+            lambda: false,
+            is_static: true,
+            is_type_initializer: true,
+            is_virtual: false,
+            inherited_bindings: record
+                .fields
+                .iter()
+                .map(|field| (field.name.clone(), field.type_name.clone()))
+                .collect(),
+            inherited_closures: Vec::new(),
+            parameters: Vec::new(),
+            constructor_initializers: Vec::new(),
+            body: Stmt {
+                kind: StmtKind::Block(
+                    record
+                        .initializers
+                        .iter()
+                        .cloned()
+                        .map(|value| Stmt {
+                            span: value.span.clone(),
+                            kind: StmtKind::Expression(value),
+                        })
+                        .collect(),
+                ),
+                span: Span::default(),
+            },
+            span,
+        });
     }
 
     fn scalar_constructor_class(
@@ -2427,6 +2605,7 @@ impl Parser<'_> {
             member_ref_qualified,
             lambda: false,
             is_static: (start..header.name_start).any(|i| self.text(i) == "static"),
+            is_type_initializer: false,
             is_virtual: (start..header.name_start).any(|i| self.text(i) == "virtual"),
             inherited_bindings: Vec::new(),
             inherited_closures: Vec::new(),
@@ -2802,6 +2981,7 @@ impl Parser<'_> {
                         member_ref_qualified: false,
                         lambda: false,
                         is_static: false,
+                        is_type_initializer: false,
                         is_virtual: false,
                         inherited_bindings: Vec::new(),
                         inherited_closures: Vec::new(),
@@ -7280,6 +7460,7 @@ impl Parser<'_> {
             member_ref_qualified: false,
             lambda: true,
             is_static: false,
+            is_type_initializer: false,
             is_virtual: false,
             inherited_bindings,
             inherited_closures,

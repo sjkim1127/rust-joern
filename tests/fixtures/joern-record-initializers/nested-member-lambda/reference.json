@@ -1,0 +1,122 @@
+{
+  "schema": "joern-call-ast-contract-v1",
+  "generator": "Original Joern v4.0.150 bundled with PyJoern 4.0.150.4",
+  "source_sha256": "8bbcbf8b8d4706e6eae38cc67f341040d9fb9c602032efb429f4b1338ab5af52",
+  "capture_sha256": "2b7017b294c34caa687bbec7a59f87016053c434561cb2a05f88bf1ad2684178",
+  "raw_log_sha256": "65975d8cb8f0236888103668ee61cd55ec0e9c0a23a677d23160d12b2431a9ca",
+  "projector_sha256": "d794cabb5fa8e7b8b414bad013ae8aaee84bb39ba632d4ee4a66965eca6cf1f0",
+  "bounds": "Call identity/result types, operand roles and AST ownership; excludes operand types, dispatch/order properties, DDG and execution parity",
+  "methods": [
+    {
+      "fullname": "A.B.Foo.<clinit>",
+      "line": 3,
+      "calls": [
+        {
+          "code": "x = [] (int a, int b) -> int\n {\n   return a + b;\n }",
+          "name": "<operator>.assignment",
+          "line": 4,
+          "column": 7,
+          "method_full_name": "<operator>.assignment",
+          "arguments": [
+            {
+              "index": 1,
+              "node": {
+                "kind": "IDENTIFIER",
+                "code": "x",
+                "name": "x",
+                "line": 4,
+                "column": 7
+              }
+            },
+            {
+              "index": 2,
+              "node": {
+                "kind": "METHOD_REF",
+                "code": "[] (int a, int b) -> int\n {\n   return a + b;\n }",
+                "name": "",
+                "line": 4,
+                "column": 11
+              }
+            }
+          ],
+          "receiver": null,
+          "shared_base_receiver": false,
+          "ast_children": [
+            {
+              "kind": "METHOD_REF",
+              "code": "[] (int a, int b) -> int\n {\n   return a + b;\n }",
+              "name": "",
+              "line": 4,
+              "column": 11
+            },
+            {
+              "kind": "IDENTIFIER",
+              "code": "x",
+              "name": "x",
+              "line": 4,
+              "column": 7
+            }
+          ],
+          "type_name": "ANY"
+        }
+      ]
+    },
+    {
+      "fullname": "A.B.Foo.<lambda>0",
+      "line": 4,
+      "calls": [
+        {
+          "code": "a + b",
+          "name": "<operator>.addition",
+          "line": 6,
+          "column": 11,
+          "method_full_name": "<operator>.addition",
+          "arguments": [
+            {
+              "index": 1,
+              "node": {
+                "kind": "IDENTIFIER",
+                "code": "a",
+                "name": "a",
+                "line": 6,
+                "column": 11
+              }
+            },
+            {
+              "index": 2,
+              "node": {
+                "kind": "IDENTIFIER",
+                "code": "b",
+                "name": "b",
+                "line": 6,
+                "column": 15
+              }
+            }
+          ],
+          "receiver": null,
+          "shared_base_receiver": false,
+          "ast_children": [
+            {
+              "kind": "IDENTIFIER",
+              "code": "a",
+              "name": "a",
+              "line": 6,
+              "column": 11
+            },
+            {
+              "kind": "IDENTIFIER",
+              "code": "b",
+              "name": "b",
+              "line": 6,
+              "column": 15
+            }
+          ],
+          "type_name": "ANY"
+        }
+      ]
+    }
+  ],
+  "include_intrinsics": true,
+  "call_types": true,
+  "operand_positions": true
+}

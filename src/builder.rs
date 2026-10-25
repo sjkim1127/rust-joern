@@ -152,7 +152,12 @@ pub fn build(
         joern_loop_conditions,
     };
     let entry = builder.node("METHOD", &function.span, Some(&function.name), None);
-    let exit = builder.node("METHOD_RETURN", &function.span, None, Some("RET"));
+    let exit_span = if function.is_type_initializer {
+        &Span::default()
+    } else {
+        &function.span
+    };
+    let exit = builder.node("METHOD_RETURN", exit_span, None, Some("RET"));
     builder.graph.nodes[exit as usize].type_name = Some(function.return_type.clone());
     if let Some(owner) = &function.implicit_this {
         let id = builder.node(
@@ -223,6 +228,16 @@ pub fn build(
     } else {
         builder.statement(&function.body, entry, false)
     };
+    if function.is_type_initializer {
+        for edge in &builder.graph.edges {
+            if edge.source == entry && edge.kind == "AST" {
+                let node = &mut builder.graph.nodes[edge.target as usize];
+                if node.kind == "BLOCK" {
+                    node.type_name = Some("ANY".into());
+                }
+            }
+        }
+    }
     if function.lambda || function.is_static {
         let modifier = builder.node("MODIFIER", &Span::default(), None, Some(""));
         builder.ast(entry, modifier, None);
@@ -1443,7 +1458,7 @@ impl Builder<'_> {
                 }
                 let mut matches = record.fields.iter().filter(|field| field.name == *name);
                 let field = matches.next()?;
-                if matches.next().is_some() || field.cv_qualified {
+                if matches.next().is_some() || field.cv_qualified || field.is_static {
                     return None;
                 }
                 Some(field.binding_type.clone())
@@ -2826,7 +2841,9 @@ mod tests {
         let visible: Vec<_> = parsed
             .functions
             .iter()
-            .filter(|function| !function.cfg.nodes.is_empty())
+            // Frozen references use FastParser's public '<' blacklist. Raw
+            // type initializer population is checked separately, unfiltered.
+            .filter(|function| !function.name.starts_with('<') && !function.cfg.nodes.is_empty())
             .collect();
         assert_eq!(visible.len(), expected.len(), "function coverage");
         for function in visible {

@@ -32,3 +32,7 @@ C++ lifetime/exception semantics or execution equivalence. Negative Rust tests
 include intentionally invalid declarations and unmodeled but valid C++; parser
 acceptance must not be used as a validity verdict. See the
 [measured port report](../../../docs/eval/joern_field_callable_port_2026-10-25.md).
+
+The later [record-initializer control](../joern-record-initializers/README.md)
+also preserves the original fixed-array version and checks its complete
+method population after adding `<clinit>` support.

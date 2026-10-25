@@ -152,3 +152,12 @@ and scalar field arguments. Unique owner/field evidence and signature evidence
 remain separate. [The field-callable report](eval/joern_field_callable_port_2026-10-25.md)
 records original 11-METHOD/12-CALL controls, 10 public CFGs, regression replays
 and explicit exclusions, including the existing fixed-array `<clinit>` gap.
+
+## Fifth batch: record initializer containers
+
+Member-root call ASTs are retained in c2cpg-style `<clinit>` methods, with
+explicit-initializer precedence over array-modifier-only ASTs. Member-lambda
+fullnames use their declaring type. [The report](eval/joern_record_init_port_2026-10-25.md)
+separates raw container CFG certification, public wrapper exports, added raw
+method populations and unchanged existing functions. Original source bodies
+are frozen by the new `capture_call_rules.py --record-init` profile.

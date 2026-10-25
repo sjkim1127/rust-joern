@@ -238,6 +238,7 @@ fn build_source(source: &str, filename: &str, options: &Options) -> Result<Built
             member_ref_qualified: false,
             lambda: false,
             is_static: false,
+            is_type_initializer: false,
             is_virtual: false,
             inherited_bindings: Vec::new(),
             inherited_closures: Vec::new(),

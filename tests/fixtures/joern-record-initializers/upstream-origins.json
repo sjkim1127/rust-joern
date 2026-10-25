@@ -1,0 +1,24 @@
+{
+  "124": {
+    "sha256": "1e27e88e49f1b08efedb837831e2eaece5f6b8e56785bdc82650c6853a15f49f",
+    "origins": [
+      {
+        "upstream_commit": "958fdd3d976197a783f8ade1254b43e977648f28",
+        "path": "joern-cli/frontends/c2cpg/src/test/scala/io/joern/c2cpg/passes/ast/AstCreationPassTests.scala",
+        "line": 162,
+        "kind": "upstream_test_source_control_not_corpus"
+      }
+    ]
+  },
+  "125": {
+    "sha256": "8bbcbf8b8d4706e6eae38cc67f341040d9fb9c602032efb429f4b1338ab5af52",
+    "origins": [
+      {
+        "upstream_commit": "958fdd3d976197a783f8ade1254b43e977648f28",
+        "path": "joern-cli/frontends/c2cpg/src/test/scala/io/joern/c2cpg/passes/ast/AstCreationPassTests.scala",
+        "line": 204,
+        "kind": "upstream_test_source_control_not_corpus"
+      }
+    ]
+  }
+}

@@ -41,6 +41,16 @@ CALLABLE_OWNERS = {
     ],
 }
 
+RECORD_INIT_OWNERS = {
+    "joern-cli/frontends/c2cpg/src/main/scala/io/joern/c2cpg/astcreation/AstForTypesCreator.scala": [
+        "astsForDeclaration",
+        "astsForCompositeType",
+    ],
+    "joern-cli/frontends/x2cpg/src/main/scala/io/joern/x2cpg/AstCreatorBase.scala": [
+        "staticInitMethodAst"
+    ],
+}
+
 
 def extract(source, name):
     ts = tokens(source)
@@ -83,7 +93,14 @@ def main():
         action="store_true",
         help="Freeze the callable-object and METHOD-identity port inputs",
     )
+    parser.add_argument(
+        "--record-init",
+        action="store_true",
+        help="Freeze type initializer container and declarator owners",
+    )
     args = parser.parse_args()
+    if args.callable and args.record_init:
+        parser.error("choose one port profile")
     source = args.source.resolve(strict=True)
     head = subprocess.check_output(
         ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
@@ -91,7 +108,12 @@ def main():
     if head != COMMIT:
         raise ValueError("wrong upstream source commit")
     rules = []
-    for path, names in (CALLABLE_OWNERS if args.callable else OWNERS).items():
+    owners = (
+        RECORD_INIT_OWNERS
+        if args.record_init
+        else CALLABLE_OWNERS if args.callable else OWNERS
+    )
+    for path, names in owners.items():
         data = (source / path).read_bytes()
         committed = subprocess.check_output(
             ["git", "-C", str(source), "show", "HEAD:" + path]
