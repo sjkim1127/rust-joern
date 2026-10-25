@@ -2063,6 +2063,7 @@ impl Parser<'_> {
                         name,
                         type_name,
                         function_pointer: false,
+                        cv_qualified: false,
                         span: declaration.map_or_else(|| self.span(a, b), |(_, span)| span.clone()),
                     }
                 })
@@ -2088,6 +2089,7 @@ impl Parser<'_> {
                     name: self.raw(a, b),
                     type_name: "ANY".into(),
                     function_pointer: false,
+                    cv_qualified: false,
                     span: self.span(a, b),
                 })
                 .collect()
@@ -2170,25 +2172,26 @@ impl Parser<'_> {
                 self.binding_type(&return_binding_type)
             )
         });
-        let duplicate_binding = if definition && self.cpp && !header.name.contains("::") {
-            let mut qualifiers = String::new();
-            let mut cursor = header.parameters_end + 1;
-            while cursor < body_start {
-                if let Some(after) = self.skip_attribute(cursor, body_start) {
-                    cursor = after;
-                    continue;
-                }
-                if matches!(self.text(cursor), "(" | "[") {
-                    cursor = self
-                        .matching(cursor, body_start)
-                        .map_or(body_start, |close| close + 1);
-                } else {
-                    if matches!(self.text(cursor), "const" | "volatile" | "&" | "&&") {
-                        qualifiers.push_str(self.text(cursor));
-                    }
-                    cursor += 1;
-                }
+        let mut qualifiers = String::new();
+        let mut cursor = header.parameters_end + 1;
+        while cursor < body_start {
+            if let Some(after) = self.skip_attribute(cursor, body_start) {
+                cursor = after;
+                continue;
             }
+            if matches!(self.text(cursor), "(" | "[") {
+                cursor = self
+                    .matching(cursor, body_start)
+                    .map_or(body_start, |close| close + 1);
+            } else {
+                if matches!(self.text(cursor), "const" | "volatile" | "&" | "&&") {
+                    qualifiers.push_str(self.text(cursor));
+                }
+                cursor += 1;
+            }
+        }
+        let member_ref_qualified = qualifiers.contains('&');
+        let duplicate_binding = if definition && self.cpp && !header.name.contains("::") {
             !self.defined_cpp_methods.insert(format!(
                 "{qualified_name}:{}:{qualifiers}",
                 binding_signature.as_deref().unwrap_or_default()
@@ -2231,6 +2234,24 @@ impl Parser<'_> {
             // C function bindings have a bare name, including declarations
             // encountered while converting a record's members.
             name.clone()
+        };
+        let binding_name = full_name.split(':').next().unwrap().to_string();
+        // FullNameProvider removes the CDT binding's "operator " prefix from
+        // METHOD identities. The source lookup key remains operator().
+        let full_name = if self.cpp
+            && header.name.rsplit("::").next() == Some("operator()")
+            && qualified_name
+                .rsplit_once("::")
+                .is_some_and(|(owner, _)| self.class_scopes.contains(owner))
+            && !duplicate_binding
+        {
+            format!(
+                "{}:{}",
+                binding_name.strip_suffix("operator()").unwrap().to_string() + "()",
+                binding_signature.as_deref().unwrap_or_default()
+            )
+        } else {
+            full_name
         };
         for parameter in &parameters {
             self.variables.insert(parameter.name.clone());
@@ -2362,6 +2383,7 @@ impl Parser<'_> {
         functions.push(Function {
             name,
             full_name,
+            binding_name,
             binding_return_type: self.binding_type(&return_binding_type),
             return_type,
             signature,
@@ -2370,6 +2392,7 @@ impl Parser<'_> {
             lambda_parent: None,
             implicit_fields,
             member_cv_qualified,
+            member_ref_qualified,
             lambda: false,
             is_static: (start..header.name_start).any(|i| self.text(i) == "static"),
             is_virtual: (start..header.name_start).any(|i| self.text(i) == "virtual"),
@@ -2726,6 +2749,7 @@ impl Parser<'_> {
                             name: self.raw(a, b),
                             type_name: "ANY".into(),
                             function_pointer: false,
+                            cv_qualified: false,
                             span: self.span(a, b),
                         })
                         .collect();
@@ -2733,6 +2757,7 @@ impl Parser<'_> {
                     self.variables.insert(name.clone());
                     self.function_declarations.push(Function {
                         full_name: name.clone(),
+                        binding_name: name.clone(),
                         name,
                         return_type: "ANY".into(),
                         binding_return_type: "ANY".into(),
@@ -2742,6 +2767,7 @@ impl Parser<'_> {
                         lambda_parent: None,
                         implicit_fields: Vec::new(),
                         member_cv_qualified: false,
+                        member_ref_qualified: false,
                         lambda: false,
                         is_static: false,
                         is_virtual: false,
@@ -2870,6 +2896,7 @@ impl Parser<'_> {
                     name: "...".into(),
                     type_name: "...".into(),
                     function_pointer: false,
+                    cv_qualified: false,
                     span: self.span(a, b),
                 });
                 continue;
@@ -2918,6 +2945,8 @@ impl Parser<'_> {
                 name,
                 type_name,
                 function_pointer: self.text(suffix) == "(",
+                cv_qualified: (a..name_index.unwrap_or(base_end))
+                    .any(|i| matches!(self.text(i), "const" | "volatile")),
                 span: self.span(a, b),
             });
         }
@@ -3411,6 +3440,7 @@ impl Parser<'_> {
                         problem: self.cpp,
                         is_typedef: false,
                         nested_declarator: true,
+                        cv_qualified: false,
                         span: self.span(a, b),
                     }];
                 }
@@ -3512,6 +3542,9 @@ impl Parser<'_> {
                 problem: false,
                 is_typedef,
                 nested_declarator: self.nested_declarator(a, b),
+                cv_qualified: (start..base_end)
+                    .chain(a..name_index)
+                    .any(|i| matches!(self.text(i), "const" | "volatile")),
                 span: self.span(a, b),
             });
         }
@@ -5178,6 +5211,7 @@ impl Parser<'_> {
                         problem: false,
                         is_typedef: false,
                         nested_declarator: false,
+                        cv_qualified: false,
                         span: self.span(range[0].0, range[0].1),
                     }
                 } else {
@@ -7201,6 +7235,7 @@ impl Parser<'_> {
         };
         self.function_declarations.push(Function {
             name,
+            binding_name: full_name.split(':').next().unwrap().to_string(),
             full_name,
             binding_return_type: self.binding_type(&return_type),
             return_type,
@@ -7210,6 +7245,7 @@ impl Parser<'_> {
             implicit_this: None,
             implicit_fields: self.function_fields.clone(),
             member_cv_qualified: self.function_member_cv,
+            member_ref_qualified: false,
             lambda: true,
             is_static: false,
             is_virtual: false,

@@ -29,6 +29,17 @@ OWNERS = {
         "setArgumentIndices"
     ],
 }
+CALLABLE_OWNERS = {
+    "joern-cli/frontends/c2cpg/src/main/scala/io/joern/c2cpg/astcreation/AstForExpressionsCreator.scala": [
+        "astForCppCallExpression"
+    ],
+    "joern-cli/frontends/c2cpg/src/main/scala/io/joern/c2cpg/astcreation/FullNameProvider.scala": [
+        "replaceOperator",
+        "shortNameForIASTDeclarator",
+        "shortNameForICPPASTFunctionDefinition",
+        "fullNameFromBinding",
+    ],
+}
 
 
 def extract(source, name):
@@ -67,6 +78,11 @@ def main():
         default=ROOT / "tests/reference/joern-4.0.150/call-rules.json",
     )
     parser.add_argument("--check", action="store_true")
+    parser.add_argument(
+        "--callable",
+        action="store_true",
+        help="Freeze the callable-object and METHOD-identity port inputs",
+    )
     args = parser.parse_args()
     source = args.source.resolve(strict=True)
     head = subprocess.check_output(
@@ -75,7 +91,7 @@ def main():
     if head != COMMIT:
         raise ValueError("wrong upstream source commit")
     rules = []
-    for path, names in OWNERS.items():
+    for path, names in (CALLABLE_OWNERS if args.callable else OWNERS).items():
         data = (source / path).read_bytes()
         committed = subprocess.check_output(
             ["git", "-C", str(source), "show", "HEAD:" + path]
@@ -102,6 +118,8 @@ def main():
         "bounds": "Exact direct-port source, not generated Rust and not CDT type resolution",
         "functions": rules,
     }
+    if args.callable:
+        result["profile"] = "callable-object-and-method-identity"
     encoded = json.dumps(result, indent=2) + "\n"
     if args.check:
         if args.output.read_text() != encoded:

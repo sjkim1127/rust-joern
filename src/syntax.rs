@@ -11,6 +11,8 @@ pub struct Span {
 pub struct Function {
     pub name: String,
     pub full_name: String,
+    /// Source lookup key; c2cpg METHOD identities can differ for operators.
+    pub binding_name: String,
     pub return_type: String,
     /// CDT's canonical function binding type can differ from METHOD_RETURN's
     /// declaration-specifier type, especially for typedefs and pointer returns.
@@ -22,6 +24,7 @@ pub struct Function {
     pub lambda_parent: Option<String>,
     pub implicit_fields: Vec<(String, String)>,
     pub member_cv_qualified: bool,
+    pub member_ref_qualified: bool,
     /// CDT stores a lambda method separately from the enclosing method AST.
     pub lambda: bool,
     pub is_static: bool,
@@ -51,6 +54,7 @@ pub struct Parameter {
     pub name: String,
     pub type_name: String,
     pub function_pointer: bool,
+    pub cv_qualified: bool,
     pub span: Span,
 }
 
@@ -76,6 +80,7 @@ pub struct Declaration {
     /// Initializer conversion reads the outer declarator's name, which is
     /// empty when the actual local name belongs to a parenthesized declarator.
     pub nested_declarator: bool,
+    pub cv_qualified: bool,
     pub span: Span,
 }
 

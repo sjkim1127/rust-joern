@@ -175,6 +175,7 @@ fn build_source(source: &str, filename: &str, options: &Options) -> Result<Built
             [
                 f.name.clone(),
                 f.full_name.clone(),
+                f.binding_name.replace('.', "::"),
                 f.full_name.split(':').next().unwrap().replace('.', "::"),
             ]
         })
@@ -182,7 +183,7 @@ fn build_source(source: &str, filename: &str, options: &Options) -> Result<Built
     let mut methods: HashMap<String, Vec<&syntax::Function>> = HashMap::new();
     for function in &unit.functions {
         methods
-            .entry(function.full_name.split(':').next().unwrap().to_owned())
+            .entry(function.binding_name.clone())
             .or_default()
             .push(function);
     }
@@ -224,6 +225,7 @@ fn build_source(source: &str, filename: &str, options: &Options) -> Result<Built
         let function = syntax::Function {
             name: "<global>".into(),
             full_name: "<global>".into(),
+            binding_name: "<global>".into(),
             return_type: "void".into(),
             binding_return_type: "void".into(),
             signature: "void()".into(),
@@ -232,6 +234,7 @@ fn build_source(source: &str, filename: &str, options: &Options) -> Result<Built
             implicit_this: None,
             implicit_fields: Vec::new(),
             member_cv_qualified: false,
+            member_ref_qualified: false,
             lambda: false,
             is_static: false,
             is_virtual: false,

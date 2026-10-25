@@ -150,7 +150,7 @@ fn explicit_operator_ids_do_not_become_binary_operators_or_index_expressions() {
             "x.operator[](1)",
         ),
         (
-            "operator()",
+            "operator ()",
             "namespace demo { struct Object { int operator()(int); }; }",
             "x.operator()(1)",
         ),

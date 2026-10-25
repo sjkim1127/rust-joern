@@ -6,6 +6,31 @@ graphs it affects and how to restore the reference behavior. Add an entry, newes
 first, in the change that introduces a divergence. Fixes that restore parity
 belong in regression fixtures, not here.
 
+## Bounded callable-object overload evidence
+
+**Recorded:** 2026-10-25, research fork follow-up; no upstream PR or DecBench pin update.
+
+**Joern:** CDT's nonclosure class-call branch can resolve `operator()` through
+implicit conversions, promotions, defaults, CV/ref ranking and template rules.
+
+**Rust Joern:** an explicitly declared own `operator()` proves the shared
+callee/base/receiver shape independently of selecting an overload. A resolved
+signature/result requires exact supported argument-type evidence and one unique
+signature. Unsupported conversions, CV/ref argument constraints or ambiguous
+selection retain `Class.<operator>():<unresolvedSignature>` with `ANY`, even
+where CDT resolves a signature. The call and all executable operands remain.
+Qualified/inherited/aliased callable lookup remains bounded separately.
+
+**Why:** arity or a coincidentally named global function is not overload proof.
+This is conservative missing type/binding information, not a syntax error or
+permission to drop a call, shrink evaluation populations, or claim full parity.
+
+**Affects:** CPG call identity/result types and dependent DDG summaries outside
+the frozen supported controls. There is no runtime/JVM dependency and no option
+that implements full CDT overload resolution; immutable consumers keep their
+existing library pin. Joern's const-object untyped path is preserved rather
+than treated as a new semantic policy.
+
 ## Invalid explicit-destructor call diagnostics
 
 **Recorded:** 2026-10-25, fork research follow-up; no upstream PR or DecBench pin update.

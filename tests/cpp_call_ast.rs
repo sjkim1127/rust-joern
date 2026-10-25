@@ -230,3 +230,161 @@ fn unsupported_known_owner_lookup_is_not_a_proven_problem_binding() {
         assert!(f.cpg.nodes[id as usize].method_full_name.is_none());
     }
 }
+
+#[test]
+fn declared_callable_object_shares_one_base_receiver_and_result_type() {
+    let analysis = parse("struct C { int operator()(int); }; int f(C& fn) { return fn(1); }");
+    let f = method(&analysis, "f");
+    let id = call(f, "<operator>()");
+    assert_eq!(
+        f.cpg.nodes[id as usize].method_full_name.as_deref(),
+        Some("C.<operator>():int(int)")
+    );
+    assert_eq!(f.cpg.nodes[id as usize].type_name.as_deref(), Some("int"));
+    assert_eq!(
+        edge(f, id, "ARGUMENT", Some("0")),
+        edge(f, id, "RECEIVER", None)
+    );
+    assert!(edge(f, id, "RECEIVER", None).is_some());
+    assert!(
+        analysis
+            .functions
+            .iter()
+            .any(|m| m.fullname == "C.():int(int)")
+    );
+}
+
+#[test]
+fn callable_index_and_argument_effects_are_materialized_once_in_order() {
+    let analysis = parse(
+        "struct C { int operator()(int); }; int tick(); int f(C* fn, int i) { return fn[i++](tick()); }",
+    );
+    let f = method(&analysis, "f");
+    let id = call(f, "<operator>()");
+    let inc = call(f, "<operator>.postIncrement");
+    let tick = call(f, "tick");
+    assert_eq!(
+        edge(f, id, "ARGUMENT", Some("0")),
+        edge(f, id, "RECEIVER", None)
+    );
+    assert!(reaches(f, inc, tick, None));
+    assert!(reaches(f, tick, id, None));
+}
+
+#[test]
+fn callable_overload_needs_exact_type_evidence_not_arity_alone() {
+    for source in [
+        "struct C { int operator()(int); }; int f(C& fn, Unknown x) { return fn(x); }",
+        "struct C { int operator()(int); int operator()(char*); }; int f(C& fn, Unknown x) { return fn(x); }",
+        "struct C { int operator()(int); }; int f(C& fn, char x) { return fn(x); }",
+        "struct C { int operator()(int)&&; }; int f(C& fn) { return fn(1); }",
+        "struct C { int operator()(char*); }; int f(C& fn,const char* text) { return fn((text)); }",
+        "struct C { int operator()(char*); }; int f(C& fn) { return fn((\"text\")); }",
+    ] {
+        let analysis = parse(source);
+        let f = method(&analysis, "f");
+        let id = call(f, "<operator>()");
+        assert_eq!(
+            f.cpg.nodes[id as usize].method_full_name.as_deref(),
+            Some("C.<operator>():<unresolvedSignature>")
+        );
+        assert_eq!(f.cpg.nodes[id as usize].type_name.as_deref(), Some("ANY"));
+        assert!(edge(f, id, "RECEIVER", None).is_some());
+    }
+}
+
+#[test]
+fn callable_variable_and_cv_object_do_not_bind_to_shadowed_global_function() {
+    let analysis = parse(
+        "int fn(int); struct C { int operator()(int)const; }; int f(C& fn) { return fn(1); } int g(const C& fn) { return fn(1); }",
+    );
+    let f = method(&analysis, "f");
+    assert_eq!(
+        f.cpg.nodes[call(f, "<operator>()") as usize]
+            .method_full_name
+            .as_deref(),
+        Some("C.<operator>():int(int)")
+    );
+    let g = method(&analysis, "g");
+    let id = call(g, "fn");
+    assert_eq!(
+        g.cpg.nodes[id as usize].method_full_name.as_deref(),
+        Some("<unresolvedNamespace>.fn:<unresolvedSignature>(1)")
+    );
+    assert!(edge(g, id, "RECEIVER", None).is_none());
+}
+
+#[test]
+fn callable_alias_keeps_explicit_cv_while_copy_does_not_inherit_it() {
+    let analysis = parse(
+        "struct C { int operator()(int)const; }; int f(const C& other) { const C& alias=other; return alias(1); } int g(const C& other) { C copy=other; return copy(1); }",
+    );
+    let f = method(&analysis, "f");
+    assert!(edge(f, call(f, "alias"), "RECEIVER", None).is_none());
+    let g = method(&analysis, "g");
+    assert!(edge(g, call(g, "<operator>()"), "RECEIVER", None).is_some());
+}
+
+#[test]
+fn callable_root_is_read_once_and_short_circuit_can_bypass_it() {
+    let analysis = parse(
+        "struct C { int operator()(int); }; int tick(); int f(int flag,C& fn) { return flag && fn(tick()); }",
+    );
+    let f = method(&analysis, "f");
+    let id = call(f, "<operator>()");
+    let receiver = edge(f, id, "RECEIVER", None).unwrap();
+    let tick = call(f, "tick");
+    let entry = f.cpg.nodes.iter().find(|n| n.kind == "METHOD").unwrap().id;
+    let exit = f
+        .cpg
+        .nodes
+        .iter()
+        .find(|n| n.kind == "METHOD_RETURN")
+        .unwrap()
+        .id;
+    assert!(reaches(f, receiver, tick, None));
+    assert!(reaches(f, tick, id, None));
+    assert!(reaches(f, entry, exit, Some(receiver)));
+    assert!(reaches(f, entry, exit, Some(tick)));
+}
+
+#[test]
+fn nested_callable_argument_types_do_not_duplicate_nested_calls() {
+    let analysis = parse(
+        "struct C { int operator()(int); }; int tick(); int f(C& fn) { return fn(fn(tick())); }",
+    );
+    let f = method(&analysis, "f");
+    let calls: Vec<_> = f
+        .cpg
+        .nodes
+        .iter()
+        .filter(|n| n.name.as_deref() == Some("<operator>()"))
+        .collect();
+    assert_eq!(calls.len(), 2);
+    assert!(
+        calls
+            .iter()
+            .all(|n| n.method_full_name.as_deref() == Some("C.<operator>():int(int)"))
+    );
+    call(f, "tick");
+}
+
+#[test]
+fn callable_objects_do_not_reclassify_lambda_or_function_pointer_receivers() {
+    for (source, name) in [
+        (
+            "int f(int (*fn)(int)) { return fn(1); }",
+            "<operator>.pointerCall",
+        ),
+        (
+            "int f(int x) { auto fn=[x](int y){return x+y;}; return fn(1); }",
+            "<operator>()",
+        ),
+    ] {
+        let analysis = parse(source);
+        let f = method(&analysis, "f");
+        let id = call(f, name);
+        assert!(edge(f, id, "RECEIVER", None).is_some());
+        assert!(edge(f, id, "ARGUMENT", Some("0")).is_none());
+    }
+}

@@ -1,6 +1,6 @@
 use crate::{
     graph::{Diagnostic, Edge, ExternalReference, FunctionGraph, Node, NodeId, PropertyGraph},
-    joern_calls::{CallKind, CallLayout, Operand, unresolved_full_name},
+    joern_calls::{CallKind, CallLayout, Operand, object_full_name, unresolved_full_name},
     joern_operators::binary_operator,
     lexer::integer_truth,
     normalize,
@@ -85,6 +85,7 @@ struct Builder<'a> {
     methods: &'a HashMap<String, Vec<&'a Function>>,
     known_types: &'a HashSet<String>,
     function_pointers: HashSet<NodeId>,
+    cv_bindings: HashSet<NodeId>,
     closures: HashMap<NodeId, Closure>,
     inherited_bindings: HashMap<String, String>,
     inherited_closures: HashMap<String, Closure>,
@@ -96,6 +97,12 @@ struct Builder<'a> {
     diagnostics: Vec<Diagnostic>,
     try_depth: usize,
     joern_loop_conditions: bool,
+}
+
+struct CallableObject {
+    owner: String,
+    signature: Option<String>,
+    return_type: String,
 }
 
 pub fn build(
@@ -117,6 +124,7 @@ pub fn build(
         methods: bindings.methods,
         known_types: bindings.known_types,
         function_pointers: HashSet::new(),
+        cv_bindings: HashSet::new(),
         closures: HashMap::new(),
         inherited_bindings: function.inherited_bindings.iter().cloned().collect(),
         inherited_closures: function.inherited_closures.iter().cloned().collect(),
@@ -153,6 +161,9 @@ pub fn build(
         builder.graph.nodes[id as usize].type_name = Some(owner.clone());
         builder.ast(entry, id, None);
         builder.scopes[0].insert("this".into(), (id, owner.clone()));
+        if function.member_cv_qualified {
+            builder.cv_bindings.insert(id);
+        }
     }
     for parameter in &function.parameters {
         let id = builder.node(
@@ -162,6 +173,9 @@ pub fn build(
             None,
         );
         builder.graph.nodes[id as usize].type_name = Some(parameter.type_name.clone());
+        if parameter.cv_qualified {
+            builder.cv_bindings.insert(id);
+        }
         if parameter.function_pointer {
             builder.function_pointers.insert(id);
         }
@@ -758,14 +772,18 @@ impl Builder<'_> {
                         ExprKind::Member { .. } => !self.cpp,
                         _ => !self.cpp || self.pointer_call_expression(callee),
                     };
+                let callable = (self.cpp && closure.is_none() && !pointer)
+                    .then(|| self.callable_object(callee, arguments))
+                    .flatten();
                 let unresolved_operator = self.cpp
                     && closure.is_none()
+                    && callable.is_none()
                     && !pointer
                     && !matches!(
                         callee.kind,
                         ExprKind::Identifier(_) | ExprKind::Member { .. }
                     );
-                let name = if closure.is_some() || unresolved_operator {
+                let name = if closure.is_some() || callable.is_some() || unresolved_operator {
                     "<operator>()"
                 } else if pointer {
                     "<operator>.pointerCall"
@@ -778,29 +796,55 @@ impl Builder<'_> {
                         _ => "<operator>.pointerCall",
                     }
                 };
-                let resolved = (!pointer && closure.is_none() && !unresolved_operator)
-                    .then(|| self.resolve_call(callee, arguments))
-                    .flatten()
-                    .map(|method| {
-                        (
-                            method.full_name.clone(),
-                            if self.cpp {
-                                method.binding_return_type.clone()
-                            } else {
-                                method.return_type.clone()
-                            },
-                            method.is_virtual,
-                        )
-                    });
+                let resolved =
+                    (!pointer && closure.is_none() && callable.is_none() && !unresolved_operator)
+                        .then(|| self.resolve_call(callee, arguments))
+                        .flatten()
+                        .map(|method| {
+                            (
+                                if self.cpp
+                                    && method.binding_name.ends_with(".operator()")
+                                    && method
+                                        .full_name
+                                        .split(':')
+                                        .next()
+                                        .is_some_and(|head| head.ends_with(".()"))
+                                {
+                                    format!(
+                                        "{}operator ():{}",
+                                        method.binding_name.strip_suffix("operator()").unwrap(),
+                                        method.full_name.split_once(':').unwrap().1
+                                    )
+                                } else {
+                                    method.full_name.clone()
+                                },
+                                if self.cpp {
+                                    method.binding_return_type.clone()
+                                } else {
+                                    method.return_type.clone()
+                                },
+                                method.is_virtual,
+                                (self.cpp
+                                    && method.binding_name.ends_with(".operator()")
+                                    && method
+                                        .full_name
+                                        .split(':')
+                                        .next()
+                                        .is_some_and(|head| head.ends_with(".()")))
+                                .then_some("operator ()"),
+                            )
+                        });
                 let kind = if pointer {
                     CallKind::Pointer
                 } else if closure.is_some() {
                     CallKind::Closure
+                } else if callable.is_some() {
+                    CallKind::CallableObject
                 } else if unresolved_operator {
                     CallKind::UnresolvedExpression
                 } else if self.cpp && matches!(callee.kind, ExprKind::Member { .. }) {
                     match &resolved {
-                        Some((_, _, is_virtual)) => CallKind::ResolvedMember {
+                        Some((_, _, is_virtual, _)) => CallKind::ResolvedMember {
                             is_virtual: *is_virtual,
                         },
                         None if self.member_binding_is_opaque(callee) => CallKind::OpaqueMember,
@@ -818,9 +862,18 @@ impl Builder<'_> {
                         closure.parameter_types.join(","),
                     ));
                     self.graph.nodes[id as usize].type_name = Some(closure.return_type.clone());
-                } else if let Some((fullname, return_type, _)) = resolved {
+                } else if let Some(callable) = callable {
+                    self.graph.nodes[id as usize].method_full_name = Some(object_full_name(
+                        &callable.owner,
+                        callable.signature.as_deref(),
+                    ));
+                    self.graph.nodes[id as usize].type_name = Some(callable.return_type);
+                } else if let Some((fullname, return_type, _, call_name)) = resolved {
                     self.graph.nodes[id as usize].method_full_name = Some(fullname);
                     self.graph.nodes[id as usize].type_name = Some(return_type);
+                    if let Some(call_name) = call_name {
+                        self.graph.nodes[id as usize].name = Some(call_name.into());
+                    }
                 } else if self.cpp
                     && !pointer
                     && kind != CallKind::OpaqueMember
@@ -1178,6 +1231,11 @@ impl Builder<'_> {
         let mut keys = Vec::new();
         match &callee.kind {
             ExprKind::Identifier(name) => {
+                // A value binding shadows declarations in the outer function
+                // table. Unsupported callable values are not global calls.
+                if self.binding(name).is_some() || self.inherited_bindings.contains_key(name) {
+                    return None;
+                }
                 if self.cpp && !name.contains("::") && !self.method_scope.is_empty() {
                     keys.push(format!("{}.{}", self.method_scope, name));
                 }
@@ -1191,7 +1249,9 @@ impl Builder<'_> {
                     return None;
                 } else {
                     let owner = self.expression_type(base)?;
-                    let owner = owner.trim_end_matches(['*', '&']).replace("::", ".");
+                    let owner = owner
+                        .trim_end_matches(|c: char| c.is_whitespace() || matches!(c, '*' | '&'))
+                        .replace("::", ".");
                     keys.push(format!("{owner}.{name}"));
                 }
             }
@@ -1237,6 +1297,193 @@ impl Builder<'_> {
             }
         }
         None
+    }
+    fn callable_object(&self, callee: &Expr, arguments: &[Expr]) -> Option<CallableObject> {
+        let ty = self.callable_receiver_type(callee)?;
+        // Joern 4.0.150 handles cv-qualified object types through its untyped
+        // path. Preserve that compatibility boundary rather than erasing cv.
+        if ty
+            .split_whitespace()
+            .any(|word| matches!(word.trim_matches('&'), "const" | "volatile"))
+        {
+            return None;
+        }
+        let compact = ty.split_whitespace().collect::<String>();
+        let owner = compact.trim_end_matches('&');
+        if owner.contains(['*', '[']) || !self.known_types.contains(owner) {
+            return None;
+        }
+        let owner = owner.replace("::", ".");
+        let methods = self.methods.get(&format!("{owner}.operator()"))?;
+        let argument_types = arguments
+            .iter()
+            .map(|arg| self.callable_argument_type(arg))
+            .collect::<Option<Vec<_>>>();
+        let mut signatures = std::collections::BTreeSet::new();
+        if !methods.iter().any(|method| method.member_ref_qualified)
+            && let Some(argument_types) = argument_types
+        {
+            for method in methods {
+                if self.callable_parameters_match(method, &argument_types)
+                    && let Some((_, signature)) = method.full_name.split_once(':')
+                    && signature != "<unresolvedSignature>"
+                {
+                    signatures.insert((signature.to_string(), method.binding_return_type.clone()));
+                }
+            }
+        }
+        let (signature, return_type) = if signatures.len() == 1 {
+            let (signature, ty) = signatures.into_iter().next().unwrap();
+            (Some(signature), ty)
+        } else {
+            (None, "ANY".into())
+        };
+        Some(CallableObject {
+            owner,
+            signature,
+            return_type,
+        })
+    }
+    fn callable_parameters_match(&self, method: &Function, types: &[String]) -> bool {
+        let parameters = &method.parameters;
+        if parameters.len() == 1
+            && parameters[0].name.is_empty()
+            && parameters[0].type_name == "void"
+        {
+            return types.is_empty();
+        }
+        parameters.len() == types.len()
+            && !parameters.iter().any(|parameter| parameter.cv_qualified)
+            && parameters.iter().zip(types).all(|(parameter, ty)| {
+                parameter.type_name.split_whitespace().collect::<String>() == *ty
+            })
+    }
+    fn callable_argument_type(&self, expression: &Expr) -> Option<String> {
+        if self.callable_argument_has_unmodeled_qualification(expression) {
+            return None;
+        }
+        let ty = self.callable_operand_type(expression)?;
+        let compact = ty.split_whitespace().collect::<String>();
+        let base = compact.trim_end_matches(['*', '&']);
+        let builtin = matches!(
+            base,
+            "bool"
+                | "char"
+                | "signedchar"
+                | "unsignedchar"
+                | "short"
+                | "unsignedshort"
+                | "int"
+                | "unsignedint"
+                | "long"
+                | "unsignedlong"
+                | "longlong"
+                | "unsignedlonglong"
+                | "float"
+                | "double"
+                | "longdouble"
+                | "wchar_t"
+                | "char16_t"
+                | "char32_t"
+        );
+        (!compact.contains('&')
+            && (builtin || compact.ends_with('*') && self.known_types.contains(base)))
+        .then_some(compact)
+    }
+    fn callable_argument_has_unmodeled_qualification(&self, expression: &Expr) -> bool {
+        match &expression.kind {
+            ExprKind::Identifier(name) => self
+                .binding(name)
+                .is_some_and(|(id, _)| self.cv_bindings.contains(id)),
+            ExprKind::Literal(value) => value.starts_with('"'),
+            ExprKind::Bracketed(inner)
+            | ExprKind::Generated {
+                expression: inner, ..
+            } => self.callable_argument_has_unmodeled_qualification(inner),
+            ExprKind::Unary { op, argument, .. } if matches!(op.as_str(), "*" | "&") => {
+                self.callable_argument_has_unmodeled_qualification(argument)
+            }
+            ExprKind::Index { base, .. } => {
+                self.callable_argument_has_unmodeled_qualification(base)
+            }
+            _ => false,
+        }
+    }
+    fn callable_receiver_type(&self, expression: &Expr) -> Option<String> {
+        match &expression.kind {
+            ExprKind::Identifier(name) => {
+                let (id, ty) = self.binding(name)?;
+                (!self.cv_bindings.contains(id)).then(|| ty.clone())
+            }
+            ExprKind::Bracketed(inner)
+            | ExprKind::Generated {
+                expression: inner, ..
+            } => self.callable_receiver_type(inner),
+            ExprKind::Unary { op, argument, .. } if op == "*" => self
+                .callable_receiver_type(argument)?
+                .split_whitespace()
+                .collect::<String>()
+                .strip_suffix('*')
+                .map(str::to_string),
+            ExprKind::Index { base, .. } => {
+                let ty = self
+                    .callable_receiver_type(base)?
+                    .split_whitespace()
+                    .collect::<String>();
+                if let Some(pointee) = ty.strip_suffix('*') {
+                    Some(pointee.into())
+                } else if ty.ends_with(']') {
+                    ty.rfind('[').map(|end| ty[..end].into())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+    fn callable_operand_type(&self, expression: &Expr) -> Option<String> {
+        match &expression.kind {
+            ExprKind::Bracketed(inner)
+            | ExprKind::Generated {
+                expression: inner, ..
+            } => self.callable_operand_type(inner),
+            ExprKind::Unary { op, argument, .. } if op == "*" => self
+                .callable_operand_type(argument)?
+                .split_whitespace()
+                .collect::<String>()
+                .strip_suffix('*')
+                .map(str::to_string),
+            ExprKind::Index { base, .. } => {
+                let ty = self
+                    .callable_operand_type(base)?
+                    .split_whitespace()
+                    .collect::<String>();
+                if let Some(pointee) = ty.strip_suffix('*') {
+                    Some(pointee.to_string())
+                } else if ty.ends_with(']') {
+                    ty.rfind('[').map(|end| ty[..end].to_string())
+                } else {
+                    None
+                }
+            }
+            ExprKind::Call { callee, arguments } => {
+                if let Some(callable) = self.callable_object(callee, arguments) {
+                    return (!callable.return_type.contains(['*', '&'])
+                        && callable.return_type != "ANY")
+                        .then_some(callable.return_type);
+                }
+                let method = self.resolve_call(callee, arguments)?;
+                let types = arguments
+                    .iter()
+                    .map(|arg| self.callable_argument_type(arg))
+                    .collect::<Option<Vec<_>>>()?;
+                (self.callable_parameters_match(method, &types)
+                    && !method.binding_return_type.contains(['*', '&'])
+                    && method.binding_return_type != "ANY")
+                    .then(|| method.binding_return_type.clone())
+            }
+            _ => self.expression_type(expression),
+        }
     }
     fn expression_type(&self, expression: &Expr) -> Option<String> {
         match &expression.kind {
@@ -1473,6 +1720,9 @@ impl Builder<'_> {
             );
             if !declaration.is_typedef {
                 self.graph.nodes[local as usize].type_name = Some(declaration.type_name.clone());
+                if declaration.cv_qualified && !declaration.is_typedef {
+                    self.cv_bindings.insert(local);
+                }
                 self.scopes.last_mut().unwrap().insert(
                     declaration.name.clone(),
                     (local, declaration.type_name.clone()),

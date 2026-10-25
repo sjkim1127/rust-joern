@@ -19,7 +19,9 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def project(method: dict) -> dict:
+def project(
+    method: dict, *, call_types: bool = False, operand_positions: bool = False
+) -> dict:
     graph = method["cpg"]
     nodes = {node["id"]: node for node in graph["nodes"]}
     if len(nodes) != len(graph["nodes"]):
@@ -30,7 +32,10 @@ def project(method: dict) -> dict:
 
     def describe(node_id):
         node = nodes[node_id]
-        return {key: node.get(key) or "" for key in ("kind", "code", "name")}
+        result = {key: node.get(key) or "" for key in ("kind", "code", "name")}
+        if operand_positions:
+            result.update(line=node.get("line", 0), column=node.get("column", 0))
+        return result
 
     calls = []
     for node in nodes.values():
@@ -75,6 +80,8 @@ def project(method: dict) -> dict:
                 ),
             }
         )
+        if call_types:
+            calls[-1]["type_name"] = node.get("type_name") or ""
     return {
         "fullname": method["fullname"],
         "line": method["start_line"],
@@ -84,7 +91,14 @@ def project(method: dict) -> dict:
 
 def compare(reference: dict, analysis: dict) -> list[dict]:
     expected = reference["methods"]
-    actual = [project(m) for m in analysis["functions"]]
+    actual = [
+        project(
+            m,
+            call_types=reference.get("call_types", False),
+            operand_positions=reference.get("operand_positions", False),
+        )
+        for m in analysis["functions"]
+    ]
 
     def keyed(rows):
         result = {}
@@ -116,6 +130,16 @@ def main():
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--call-types",
+        action="store_true",
+        help="Also freeze CALL result types; leaves the default contract unchanged",
+    )
+    parser.add_argument(
+        "--operand-positions",
+        action="store_true",
+        help="Preserve argument/receiver occurrence locations, including identical spellings",
+    )
     args = parser.parse_args()
     capture = (
         Path(__file__).resolve().parents[2] / "tests/fixtures/ddg-lambdas/capture.sc"
@@ -130,7 +154,10 @@ def main():
         Path(m["filename"]).name != args.source.name for m in methods
     ):
         raise ValueError("empty/wrong-source original capture")
-    projected = [project(m) for m in methods]
+    projected = [
+        project(m, call_types=args.call_types, operand_positions=args.operand_positions)
+        for m in methods
+    ]
     keys = [(m["fullname"], m["line"]) for m in projected]
     if len(keys) != len(set(keys)):
         raise ValueError("ambiguous original method population")
@@ -144,6 +171,13 @@ def main():
         "bounds": "Call identity, operand roles and AST ownership; excludes type inference, dispatch property, DDG and execution parity",
         "methods": sorted(projected, key=lambda m: (m["fullname"], m["line"])),
     }
+    if args.call_types:
+        result["call_types"] = True
+        result["bounds"] = (
+            "Call identity/result types, operand roles and AST ownership; excludes operand types, dispatch/order properties, DDG and execution parity"
+        )
+    if args.operand_positions:
+        result["operand_positions"] = True
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     print(
         json.dumps(

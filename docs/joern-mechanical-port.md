@@ -132,3 +132,14 @@ bodies/hashes are in `tests/reference/joern-4.0.150/call-rules.json`.
 `tests/fixtures/joern-calls/README.md` describes original capture, exact checked
 properties and omissions. The [call-port report](eval/joern_call_port_2026-10-25.md)
 records the measured before/after and full-input regression audit.
+
+## Third batch: callable-object and METHOD identities
+
+Declared own `operator()` calls now have separate object and overload evidence.
+The object is one shared base/receiver; unsupported overload evidence remains
+unresolved. METHOD identity, source lookup and explicit-member call identity
+are distinct. The [port report](eval/joern_callable_port_2026-10-25.md) and
+[Joern comparison status](eval/maturity_2026-10-25.md) state measured scope and
+remaining gaps. New original-reference capture profiles optionally compare
+CALL result types and operand occurrence locations, without changing the
+previous default contracts.

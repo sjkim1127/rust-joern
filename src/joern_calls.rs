@@ -19,6 +19,7 @@ pub(crate) enum CallKind {
     Named,
     Pointer,
     Closure,
+    CallableObject,
     ResolvedMember {
         is_virtual: bool,
     },
@@ -44,7 +45,9 @@ impl CallLayout {
             CallKind::ResolvedMember { is_virtual } => (Operand::MemberBase, true, is_virtual),
             CallKind::OpaqueMember => (Operand::MemberBase, true, false),
             CallKind::UnresolvedMember => (Operand::MemberBase, true, true),
-            CallKind::UnresolvedExpression => (Operand::Callee, true, true),
+            CallKind::UnresolvedExpression | CallKind::CallableObject => {
+                (Operand::Callee, true, true)
+            }
         };
         Self {
             operand,
@@ -62,4 +65,13 @@ impl CallLayout {
 /// identity, but never evidence for a resolved overload.
 pub(crate) fn unresolved_full_name(name: &str, argument_count: usize) -> String {
     format!("<unresolvedNamespace>.{name}:<unresolvedSignature>({argument_count})")
+}
+
+/// The nonclosure ICPPClassType branch does not append arity to an unknown
+/// overload signature; its class owner is known independently of the overload.
+pub(crate) fn object_full_name(owner: &str, signature: Option<&str>) -> String {
+    format!(
+        "{owner}.<operator>():{}",
+        signature.unwrap_or("<unresolvedSignature>")
+    )
 }
