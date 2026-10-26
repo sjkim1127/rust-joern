@@ -161,3 +161,12 @@ fullnames use their declaring type. [The report](eval/joern_record_init_port_202
 separates raw container CFG certification, public wrapper exports, added raw
 method populations and unchanged existing functions. Original source bodies
 are frozen by the new `capture_call_rules.py --record-init` profile.
+
+## Sixth batch: bounded member lookup and grouped lambda identities
+
+Declaration-scoped aliases and effective CV feed read-only field evidence.
+Public single-base chains preserve hiding and refuse ambiguous edges; grouped
+lambda definitions/references share canonical original-compatible names.
+[The report](eval/joern_member_lookup_2026-10-26.md) records complete source
+controls, unchanged corpus replays and remaining lookup exclusions. Original
+owner bodies are frozen by `capture_call_rules.py --lookup`.

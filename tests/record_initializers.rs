@@ -112,7 +112,7 @@ fn explicit_initializer_precedes_array_only_fallback_and_is_evaluated_once() {
         lambdas
             .functions
             .iter()
-            .any(|m| m.fullname == "H.<lambda>0")
+            .any(|m| m.fullname == "<unresolvedNamespace>.<lambda>0")
     );
 }
 

@@ -101,6 +101,35 @@ struct Builder<'a> {
     joern_loop_conditions: bool,
 }
 
+struct ResolvedCall<'a> {
+    method: &'a Function,
+    full_name: String,
+}
+impl<'a> ResolvedCall<'a> {
+    fn new(method: &'a Function, receiver_key: &str, inherited: bool) -> Self {
+        Self {
+            method,
+            full_name: if inherited {
+                format!(
+                    "{receiver_key}:{}",
+                    method
+                        .full_name
+                        .split_once(':')
+                        .map_or("<unresolvedSignature>", |(_, signature)| signature)
+                )
+            } else {
+                method.full_name.clone()
+            },
+        }
+    }
+}
+impl std::ops::Deref for ResolvedCall<'_> {
+    type Target = Function;
+    fn deref(&self) -> &Self::Target {
+        self.method
+    }
+}
+
 struct CallableObject {
     owner: String,
     signature: Option<String>,
@@ -1205,6 +1234,9 @@ impl Builder<'_> {
         if name.contains("::") {
             return true;
         }
+        if self.receiver_evidence(callee).is_some_and(|(_, cv)| cv) {
+            return false;
+        }
         self.receiver_has_known_type(base)
     }
     fn receiver_has_known_type(&self, base: &Expr) -> bool {
@@ -1245,7 +1277,7 @@ impl Builder<'_> {
             _ => false,
         }
     }
-    fn resolve_call(&self, callee: &Expr, arguments: &[Expr]) -> Option<&Function> {
+    fn resolve_call(&self, callee: &Expr, arguments: &[Expr]) -> Option<ResolvedCall<'_>> {
         let mut keys = Vec::new();
         match &callee.kind {
             ExprKind::Identifier(name) => {
@@ -1276,7 +1308,17 @@ impl Builder<'_> {
             _ => return None,
         }
         for key in keys {
-            let Some(methods) = self.methods.get(&key) else {
+            let direct = self.methods.get(&key);
+            let inherited = direct.is_none() && matches!(callee.kind, ExprKind::Member { .. });
+            let methods = if let Some(methods) = direct {
+                methods
+            } else if inherited {
+                let (owner, name) = key.rsplit_once('.')?;
+                if name == "operator()" {
+                    return None;
+                }
+                self.member_methods(owner, name)?
+            } else {
                 continue;
             };
             let mut identities = HashSet::new();
@@ -1292,11 +1334,21 @@ impl Builder<'_> {
                         && method.parameters[0].type_name == "void";
                     let arity = method.parameters.len() - usize::from(variadic || void_only);
                     (arguments.len() == arity || variadic && arguments.len() >= arity)
+                        && (!inherited
+                            || !method.is_static
+                                && !method.is_virtual
+                                && arguments
+                                    .iter()
+                                    .map(|arg| self.callable_argument_type(arg))
+                                    .collect::<Option<Vec<_>>>()
+                                    .is_some_and(|types| {
+                                        self.callable_parameters_match(method, &types)
+                                    }))
                         && identities.insert(method.full_name.as_str())
                 })
                 .collect();
             if candidates.len() == 1 {
-                return Some(candidates[0]);
+                return Some(ResolvedCall::new(candidates[0], &key, inherited));
             }
             let mut typed = candidates.into_iter().filter(|method| {
                 method
@@ -1311,7 +1363,7 @@ impl Builder<'_> {
             if let Some(method) = typed.next()
                 && typed.next().is_none()
             {
-                return Some(method);
+                return Some(ResolvedCall::new(method, &key, inherited));
             }
         }
         None
@@ -1335,7 +1387,7 @@ impl Builder<'_> {
             return None;
         }
         let owner = owner.replace("::", ".");
-        let methods = self.methods.get(&format!("{owner}.operator()"))?;
+        let methods = self.callable_methods(&owner)?;
         let argument_types = arguments
             .iter()
             .map(|arg| self.callable_argument_type(arg))
@@ -1430,11 +1482,72 @@ impl Builder<'_> {
             _ => false,
         }
     }
+    fn lookup_record_field(&self, owner: &str, name: &str) -> Option<&RecordField> {
+        let mut owner = owner.replace('.', "::");
+        let mut visited = HashSet::new();
+        loop {
+            if !visited.insert(owner.clone()) {
+                return None;
+            }
+            let record = self.record_fields.get(&owner)?;
+            if !record.callable_lookup {
+                return None;
+            }
+            let mut matches = record.fields.iter().filter(|field| field.name == name);
+            if let Some(field) = matches.next() {
+                return (matches.next().is_none()
+                    && !field.is_static
+                    && field.binding_type != "ANY")
+                    .then_some(field);
+            }
+            // A nearer method declaration hides a base field as well.
+            if self
+                .methods
+                .contains_key(&format!("{}.{name}", owner.replace("::", ".")))
+            {
+                return None;
+            }
+            if record.bases.len() != 1 {
+                return None;
+            }
+            owner.clone_from(&record.bases[0]);
+        }
+    }
+    fn member_methods(&self, owner: &str, name: &str) -> Option<&Vec<&Function>> {
+        let mut owner = owner.replace('.', "::");
+        let mut visited = HashSet::new();
+        loop {
+            if !visited.insert(owner.clone()) {
+                return None;
+            }
+            if let Some(methods) = self
+                .methods
+                .get(&format!("{}.{name}", owner.replace("::", ".")))
+            {
+                return Some(methods);
+            }
+            let record = self.record_fields.get(&owner)?;
+            if !record.callable_lookup
+                || record.fields.iter().any(|f| f.name == name)
+                || record.bases.len() != 1
+            {
+                return None;
+            }
+            owner.clone_from(&record.bases[0]);
+        }
+    }
+    fn callable_methods(&self, owner: &str) -> Option<&Vec<&Function>> {
+        self.member_methods(owner, "operator()")
+    }
     fn callable_receiver_type(&self, expression: &Expr) -> Option<String> {
+        let (ty, cv) = self.receiver_evidence(expression)?;
+        (!cv).then_some(ty)
+    }
+    fn receiver_evidence(&self, expression: &Expr) -> Option<(String, bool)> {
         match &expression.kind {
             ExprKind::Identifier(name) => {
                 let (id, ty) = self.binding(name)?;
-                (!self.cv_bindings.contains(id)).then(|| ty.clone())
+                Some((ty.clone(), self.cv_bindings.contains(id)))
             }
             ExprKind::Member {
                 base,
@@ -1444,7 +1557,7 @@ impl Builder<'_> {
                 if name.contains("::") {
                     return None;
                 }
-                let ty = self.callable_receiver_type(base)?;
+                let (ty, parent_cv) = self.receiver_evidence(base)?;
                 let compact = ty.split_whitespace().collect::<String>();
                 let object = compact.trim_end_matches('&');
                 let owner = if *indirect {
@@ -1452,36 +1565,42 @@ impl Builder<'_> {
                 } else {
                     object
                 };
-                let record = self.record_fields.get(&owner.replace('.', "::"))?;
-                if !record.callable_lookup {
+                let field = self.lookup_record_field(owner, name)?;
+                if field.binding_type.contains('(') {
                     return None;
                 }
-                let mut matches = record.fields.iter().filter(|field| field.name == *name);
-                let field = matches.next()?;
-                if matches.next().is_some() || field.cv_qualified || field.is_static {
-                    return None;
-                }
-                Some(field.binding_type.clone())
+                Some((
+                    field.binding_type.clone(),
+                    field.cv_qualified || parent_cv && !field.is_mutable,
+                ))
             }
             ExprKind::Bracketed(inner)
             | ExprKind::Generated {
                 expression: inner, ..
-            } => self.callable_receiver_type(inner),
-            ExprKind::Unary { op, argument, .. } if op == "*" => self
-                .callable_receiver_type(argument)?
-                .split_whitespace()
-                .collect::<String>()
-                .strip_suffix('*')
-                .map(str::to_string),
+            } => self.receiver_evidence(inner),
+            ExprKind::Unary { op, argument, .. } if op == "*" => {
+                let (ty, cv) = self.receiver_evidence(argument)?;
+                if cv {
+                    return None;
+                } // Pointee versus pointer cv needs richer evidence.
+                Some((
+                    ty.split_whitespace()
+                        .collect::<String>()
+                        .strip_suffix('*')?
+                        .into(),
+                    false,
+                ))
+            }
             ExprKind::Index { base, .. } => {
-                let ty = self
-                    .callable_receiver_type(base)?
-                    .split_whitespace()
-                    .collect::<String>();
+                let (ty, cv) = self.receiver_evidence(base)?;
+                if cv {
+                    return None;
+                }
+                let ty = ty.split_whitespace().collect::<String>();
                 if let Some(pointee) = ty.strip_suffix('*') {
-                    Some(pointee.into())
+                    Some((pointee.into(), false))
                 } else if ty.ends_with(']') {
-                    ty.rfind('[').map(|end| ty[..end].into())
+                    ty.rfind('[').map(|end| (ty[..end].into(), false))
                 } else {
                     None
                 }
@@ -1526,7 +1645,7 @@ impl Builder<'_> {
                     .iter()
                     .map(|arg| self.callable_argument_type(arg))
                     .collect::<Option<Vec<_>>>()?;
-                (self.callable_parameters_match(method, &types)
+                (self.callable_parameters_match(&method, &types)
                     && !method.binding_return_type.contains(['*', '&'])
                     && method.binding_return_type != "ANY")
                     .then(|| method.binding_return_type.clone())

@@ -715,7 +715,7 @@ struct Parser<'a> {
     diagnostics: Vec<ParseDiagnostic>,
     types: HashSet<String>,
     explicit_types: HashSet<String>,
-    type_aliases: HashMap<String, String>,
+    type_aliases: HashMap<String, TypeAlias>,
     extern_c: bool,
     extern_c_names: HashSet<String>,
     class_scopes: HashSet<String>,
@@ -1172,8 +1172,15 @@ impl Parser<'_> {
                         self.class_scopes.insert(nested.clone());
                         let close = self.matching(cursor, self.limit).unwrap_or(self.limit);
                         let mut record = self.collect_class_fields(cursor + 1, close);
-                        record.callable_lookup &= !(start..cursor)
-                            .any(|i| matches!(self.text(i), ":" | "union" | "template"));
+                        record.callable_lookup &=
+                            !(start..cursor).any(|i| matches!(self.text(i), "union" | "template"));
+                        if let Some(colon) = (start..cursor).find(|i| self.text(*i) == ":") {
+                            if let Some(base) = self.public_single_base(start, colon, cursor) {
+                                record.bases.push(base);
+                            } else {
+                                record.callable_lookup = false;
+                            }
+                        }
                         let fields = record.implicit_fields();
                         self.scalar_constructor_classes.remove(&nested);
                         if self.constructor_initializers
@@ -1568,6 +1575,103 @@ impl Parser<'_> {
         Some(header)
     }
 
+    fn public_single_base(&self, start: usize, colon: usize, end: usize) -> Option<String> {
+        if (colon + 1..end).any(|i| {
+            matches!(
+                self.text(i),
+                "," | "virtual" | "private" | "protected" | "<" | ">"
+            )
+        }) {
+            return None;
+        }
+        if self
+            .record_definition(start, colon)
+            .is_none_or(|i| self.text(i) != "struct")
+            && !(colon + 1..end).any(|i| self.text(i) == "public")
+        {
+            return None;
+        }
+        let spelling = (colon + 1..end)
+            .filter(|i| self.text(*i) != "public")
+            .map(|i| self.text(i))
+            .collect::<String>();
+        let base = self.resolve_class_name(&spelling)?;
+        self.class_fields.contains_key(&base).then_some(base)
+    }
+
+    fn remember_type_alias(&mut self, name: String, legacy_type: String, explicit_cv: bool) {
+        let evidence = self.field_type_evidence(&legacy_type);
+        let mut alias = TypeAlias {
+            legacy_type,
+            cv_qualified: explicit_cv || evidence.as_ref().is_some_and(|(_, cv)| *cv),
+            field_type: evidence.map(|(ty, _)| ty),
+        };
+        let key = if self.lexical_scope.is_empty() {
+            format!("::{name}")
+        } else {
+            format!("::{}::{name}", self.lexical_scope)
+        };
+        if self.type_aliases.get(&key).is_some_and(|old| {
+            old.field_type != alias.field_type || old.cv_qualified != alias.cv_qualified
+        }) {
+            alias.field_type = None;
+        }
+        if !self.in_function_body {
+            self.type_aliases.insert(key, alias.clone());
+        }
+        // Legacy name lookup remains a derived index for existing ABI/display
+        // behavior. Field evidence consults only declaration-qualified keys.
+        self.type_aliases.insert(name, alias);
+    }
+
+    fn field_type_evidence(&self, spelling: &str) -> Option<(String, bool)> {
+        let split = spelling
+            .find(['*', '&', '[', '('])
+            .unwrap_or(spelling.len());
+        let base = spelling[..split].trim();
+        let mut scope = self.lexical_scope.as_str();
+        loop {
+            let qualified = if base.starts_with("::") {
+                base.trim_start_matches("::").to_string()
+            } else if scope.is_empty() {
+                base.to_string()
+            } else {
+                format!("{scope}::{base}")
+            };
+            if let Some(alias) = self.type_aliases.get(&format!("::{qualified}")) {
+                return Some((
+                    format!("{}{}", alias.field_type.as_ref()?, &spelling[split..]),
+                    alias.cv_qualified,
+                ));
+            }
+            if self.class_scopes.contains(&qualified) {
+                return Some((
+                    format!("{}{}", qualified.replace("::", "."), &spelling[split..]),
+                    false,
+                ));
+            }
+            // Imported alias provenance is not scoped yet. Never borrow an
+            // outer same-named declaration through an unresolved import.
+            if !base.contains("::")
+                && (self.imports.contains_key(base)
+                    || self.using_namespaces.iter().any(|ns| {
+                        self.type_aliases.contains_key(&format!("::{ns}::{base}"))
+                            || self.class_scopes.contains(&format!("{ns}::{base}"))
+                    }))
+            {
+                return None;
+            }
+            if base.starts_with("::") || scope.is_empty() {
+                break;
+            }
+            scope = scope.rsplit_once("::").map_or("", |(parent, _)| parent);
+        }
+        if base.split_whitespace().all(type_word) {
+            return Some((self.binding_type(spelling), false));
+        }
+        None
+    }
+
     fn collect_class_fields(&self, start: usize, end: usize) -> RecordFields {
         let mut record = RecordFields {
             callable_lookup: true,
@@ -1626,20 +1730,16 @@ impl Parser<'_> {
                         record.fields.push(RecordField {
                             name: self.text(name).into(),
                             is_static,
-                            binding_type: if self.type_aliases.contains_key(
-                                type_name
-                                    .split(['*', '&', '[', '('])
-                                    .next()
-                                    .unwrap_or("")
-                                    .trim(),
-                            ) {
-                                "ANY".into()
-                            } else {
-                                self.binding_type(&type_name)
-                            },
-                            type_name,
+                            binding_type: self
+                                .field_type_evidence(&type_name)
+                                .map_or_else(|| "ANY".into(), |(ty, _)| ty),
+                            is_mutable: (from..base).any(|i| self.text(i) == "mutable"),
                             cv_qualified: (from..name)
-                                .any(|i| matches!(self.text(i), "const" | "volatile")),
+                                .any(|i| matches!(self.text(i), "const" | "volatile"))
+                                || self
+                                    .field_type_evidence(&type_name)
+                                    .is_some_and(|(_, cv)| cv),
+                            type_name,
                         });
                     }
                 }
@@ -3061,9 +3161,10 @@ impl Parser<'_> {
         if self.text(start) == "using" && self.text(start + 2) == "=" {
             self.types.insert(self.text(start + 1).to_string());
             self.explicit_types.insert(self.text(start + 1).to_string());
-            self.type_aliases.insert(
+            self.remember_type_alias(
                 self.text(start + 1).to_string(),
                 self.clean_type(start + 3, end),
+                (start + 3..end).any(|i| matches!(self.text(i), "const" | "volatile")),
             );
         }
         if self.cpp
@@ -3088,9 +3189,12 @@ impl Parser<'_> {
                 if let (Some(name), _) = self.declarator_name(a, b) {
                     self.types.insert(self.text(name).to_string());
                     self.explicit_types.insert(self.text(name).to_string());
-                    self.type_aliases.insert(
+                    self.remember_type_alias(
                         self.text(name).to_string(),
                         self.declarator_type(start, base_end, Some(name), b),
+                        (start..base_end)
+                            .chain(a..name)
+                            .any(|i| matches!(self.text(i), "const" | "volatile")),
                     );
                 }
             }
@@ -3237,10 +3341,14 @@ impl Parser<'_> {
         for _ in 0..16 {
             let split = raw.find(['*', '&', '[', '(']).unwrap_or(raw.len());
             let base = raw[..split].trim();
-            let Some(alias) = self.type_aliases.get(base) else {
+            let Some(alias) = self
+                .type_aliases
+                .get(base)
+                .filter(|_| !base.starts_with("::"))
+            else {
                 break;
             };
-            let replaced = format!("{alias}{}", &raw[split..]);
+            let replaced = format!("{}{}", alias.legacy_type, &raw[split..]);
             if replaced == raw {
                 break;
             }
@@ -3519,6 +3627,10 @@ impl Parser<'_> {
                 && self.text(i - 1) == "extern"
                 && self.tokens[i].kind == TokenKind::Literal
             {
+                i += 1;
+                continue;
+            }
+            if self.cpp && t == "mutable" {
                 i += 1;
                 continue;
             }
@@ -7324,6 +7436,34 @@ impl Parser<'_> {
         closure_expression(expression, &self.variable_closures)
     }
 
+    fn bracketed_lambda_identity(&mut self, expression: &mut Expr) {
+        let ExprKind::Lambda(closure) = &mut expression.kind else {
+            return;
+        };
+        if !self.cpp {
+            return;
+        }
+        // FullNameProvider.fullName(IASTUnaryExpression) sees the operand CODE;
+        // sanitizeMethodLikeFullName maps a lambda-bearing parent to the
+        // unresolved namespace. Update canonical identities before binding use.
+        let old = closure.full_name.clone();
+        let name = old.rsplit('.').next().unwrap_or(&old);
+        let new = format!("<unresolvedNamespace>.{name}");
+        if old == new {
+            return;
+        }
+        for function in &mut self.function_declarations {
+            if function.full_name == old {
+                function.full_name.clone_from(&new);
+                function.binding_name.clone_from(&new);
+            }
+            if function.lambda_parent.as_ref() == Some(&old) {
+                function.lambda_parent = Some(new.clone());
+            }
+        }
+        closure.full_name = new;
+    }
+
     fn lambda_expression(&mut self) -> Expr {
         let start = self.pos;
         let Some(capture_end) = self.matching(start, self.limit) else {
@@ -7536,8 +7676,9 @@ impl Parser<'_> {
                         argument: Box::new(argument),
                     }
                 } else {
-                    let inner = self.expression(0);
+                    let mut inner = self.expression(0);
                     self.expect(")");
+                    self.bracketed_lambda_identity(&mut inner);
                     // CDT's bracketed-primary conversion retains only the operand AST.
                     return if self.macro_expansion || matches!(inner.kind, ExprKind::List(_)) {
                         // Expanded parent CODE still contains these brackets,

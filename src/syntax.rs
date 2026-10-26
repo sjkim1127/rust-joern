@@ -240,6 +240,15 @@ pub struct ParseDiagnostic {
     pub span: Span,
 }
 
+#[derive(Clone, Debug)]
+pub struct TypeAlias {
+    /// Existing display/binding normalization contract, including C inputs.
+    pub legacy_type: String,
+    /// Frozen at declaration scope, never re-resolved at an arbitrary use site.
+    pub field_type: Option<String>,
+    pub cv_qualified: bool,
+}
+
 /// Source declaration evidence, separate from graph/display type hints.
 #[derive(Clone, Debug)]
 pub struct RecordField {
@@ -248,13 +257,16 @@ pub struct RecordField {
     pub binding_type: String,
     pub cv_qualified: bool,
     pub is_static: bool,
+    pub is_mutable: bool,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct RecordFields {
     pub fields: Vec<RecordField>,
     pub initializers: Vec<Expr>,
-    /// Direct ordinary record only: no bases, local type declarations, union,
+    /// A single proved public non-virtual base; complex inheritance abstains.
+    pub bases: Vec<String>,
+    /// Ordinary record lookup only: no local type declarations, union,
     /// template or repeated definition whose lookup would require CDT semantics.
     pub callable_lookup: bool,
 }

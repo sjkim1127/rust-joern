@@ -138,3 +138,8 @@ Use separate fresh qualification directories for `--joern-loop-conditions`
 and the upstream source-only manifest. Existing-method preservation is a
 multiset comparison of complete serialized FunctionGraph payloads, so repeated
 method identities cannot be collapsed into an accidental last-write-wins map.
+
+Follow-up, 2026-10-26: the [grouped-lambda identity port](joern_member_lookup_2026-10-26.md)
+subsequently aligns the previously recorded parenthesized lambda owner with
+original FullNameProvider behavior. The limitation above describes the earlier
+checkpoint; broader unary/lambda naming remains unported.

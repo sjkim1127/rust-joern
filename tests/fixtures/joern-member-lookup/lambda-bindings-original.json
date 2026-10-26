@@ -1,0 +1,35 @@
+{
+  "generator": "Original Joern 4.0.150 / PyJoern 4.0.150.4",
+  "source_sha256": "c60bd09300b95e6cb920acd3fde2b9b9f1c67c79bc54d26674a8c150f0c6ad9b",
+  "raw_log_sha256": "bda9821824ae8c1a4615356ff13d3729d7dee2568c5906273f29f0971d016b5c",
+  "references": [
+    {
+      "owner": "H.<clinit>",
+      "code": "[]() { return 3; }",
+      "line": 6,
+      "column": 12,
+      "target": "<unresolvedNamespace>.<lambda>3"
+    },
+    {
+      "owner": "grouped:int()",
+      "code": "[](int x) -> int { return x; }",
+      "line": 2,
+      "column": 27,
+      "target": "<unresolvedNamespace>.<lambda>1"
+    },
+    {
+      "owner": "invoked:int()",
+      "code": "[](int x) -> int { return x; }",
+      "line": 3,
+      "column": 25,
+      "target": "<unresolvedNamespace>.<lambda>2"
+    },
+    {
+      "owner": "plain:int()",
+      "code": "[](int x) -> int { return x; }",
+      "line": 1,
+      "column": 24,
+      "target": "plain:int().<lambda>0"
+    }
+  ]
+}

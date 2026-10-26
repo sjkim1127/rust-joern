@@ -51,6 +51,17 @@ RECORD_INIT_OWNERS = {
     ],
 }
 
+LOOKUP_OWNERS = {
+    "joern-cli/frontends/c2cpg/src/main/scala/io/joern/c2cpg/astcreation/FullNameProvider.scala": [
+        "fullName",
+        "sanitizeMethodLikeFullName",
+    ],
+    "joern-cli/frontends/c2cpg/src/main/scala/io/joern/c2cpg/astcreation/AstForExpressionsCreator.scala": [
+        "astForCppCallExpression",
+        "astForCppCallExpressionUntyped",
+    ],
+}
+
 
 def extract(source, name):
     ts = tokens(source)
@@ -98,8 +109,13 @@ def main():
         action="store_true",
         help="Freeze type initializer container and declarator owners",
     )
+    parser.add_argument(
+        "--lookup",
+        action="store_true",
+        help="Freeze typed/untyped member call and lambda parent identity owners",
+    )
     args = parser.parse_args()
-    if args.callable and args.record_init:
+    if sum([args.callable, args.record_init, args.lookup]) > 1:
         parser.error("choose one port profile")
     source = args.source.resolve(strict=True)
     head = subprocess.check_output(
@@ -109,9 +125,13 @@ def main():
         raise ValueError("wrong upstream source commit")
     rules = []
     owners = (
-        RECORD_INIT_OWNERS
-        if args.record_init
-        else CALLABLE_OWNERS if args.callable else OWNERS
+        LOOKUP_OWNERS
+        if args.lookup
+        else (
+            RECORD_INIT_OWNERS
+            if args.record_init
+            else CALLABLE_OWNERS if args.callable else OWNERS
+        )
     )
     for path, names in owners.items():
         data = (source / path).read_bytes()

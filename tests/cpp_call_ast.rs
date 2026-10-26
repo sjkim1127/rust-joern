@@ -216,7 +216,7 @@ fn generated_allocation_call_keeps_canonical_intrinsic_identity() {
 #[test]
 fn unsupported_known_owner_lookup_is_not_a_proven_problem_binding() {
     for source in [
-        "struct Base { int get(int); }; struct Derived : Base {}; int f(Derived* p) { return p->get(1); }",
+        "struct Base { int get(int); }; class Derived : Base {}; int f(Derived* p) { return p->get(1); }",
         "struct Box { int get(int); int get(char*); }; int f(Box* p, Unknown value) { return p->get(value); }",
         "struct Box { int get(int); }; Box* factory(); int f() { return factory()->get(1); }",
         "struct Base { int get(int); }; struct Derived : Base {}; int f(Derived* p) { return p->Base::get(1); }",
@@ -460,9 +460,9 @@ fn field_callable_cv_alias_inheritance_and_ambiguous_records_abstain() {
     for (declarations, parameter, callee) in [
         ("struct H { const C fn; };", "H& h", "h.fn"),
         ("struct H { C fn; };", "const H& h", "h.fn"),
-        ("struct B { C fn; }; struct H : B {};", "H& h", "h.fn"),
+        ("struct B { C fn; }; class H : B {};", "H& h", "h.fn"),
         (
-            "struct B { int x; }; struct H : B { C fn; };",
+            "struct B { int x; }; struct H : virtual B { C fn; };",
             "H& h",
             "h.fn",
         ),
