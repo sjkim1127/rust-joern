@@ -99,6 +99,12 @@ pub struct Diagnostic {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Analysis {
     pub schema_version: u32,
+    /// Acknowledges the optional name context actually accepted by the frontend.
+    /// Omitted for ordinary inputs to retain existing serialized output.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cpp_type_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cpp_constructor_initializers: bool,
     pub functions: Vec<FunctionGraph>,
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -111,6 +117,12 @@ pub struct Options {
     pub data_flow: bool,
     pub reaching_definitions: bool,
     pub strict: bool,
+    /// Caller-proved, visible C++ type names for an isolated source slice.
+    /// Names carry no layout, aliases, constructor bodies or function bindings.
+    /// Empty by default; never populated from benchmark oracle data for output.
+    pub cpp_type_names: Vec<String>,
+    /// Experimental CFG-only scalar initialization, requiring a complete source class.
+    pub cpp_constructor_initializers: bool,
     /// Lower constant-true `while`/`for` conditions as Joern 4.0.150 does,
     /// with a condition node and exit edge, for original-reference parity.
     /// By default they lower like the omitted condition of `for (;;)`.
