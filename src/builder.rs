@@ -2450,6 +2450,7 @@ fn function_pointer_parameter(fullname: &str, argument: usize) -> Option<String>
 // mechanically translated IASTUnaryExpression operator match.
 fn unary_operator(operator: &str, postfix: bool) -> &'static str {
     match operator {
+        "sizeof..." => "<operator>.sizeOf",
         "new" => "<operator>.new",
         "delete" | "delete[]" => "<operator>.delete",
         _ => crate::joern_operators::unary_operator(operator, postfix),
