@@ -94,6 +94,11 @@ pub fn parse_preprocessed(source: &str, cpp: bool, preprocessed: bool) -> Transl
         .map(|event| event.descriptor)
         .collect();
     TranslationUnit {
+        known_type_names: parser
+            .explicit_types
+            .union(&parser.class_scopes)
+            .cloned()
+            .collect(),
         functions,
         global_expressions: parser.global_expressions,
         retained_macro_calls,
@@ -2045,6 +2050,7 @@ impl Parser<'_> {
             member_cv_qualified,
             lambda: false,
             is_static: (start..header.name_start).any(|i| self.text(i) == "static"),
+            is_virtual: (start..header.name_start).any(|i| self.text(i) == "virtual"),
             inherited_bindings: Vec::new(),
             inherited_closures: Vec::new(),
             parameters,
@@ -2415,6 +2421,7 @@ impl Parser<'_> {
                         member_cv_qualified: false,
                         lambda: false,
                         is_static: false,
+                        is_virtual: false,
                         inherited_bindings: Vec::new(),
                         inherited_closures: Vec::new(),
                         parameters,
@@ -6878,6 +6885,7 @@ impl Parser<'_> {
             member_cv_qualified: self.function_member_cv,
             lambda: true,
             is_static: false,
+            is_virtual: false,
             inherited_bindings,
             inherited_closures,
             parameters,
