@@ -2031,7 +2031,7 @@ mod tests {
                 const DEPTH: usize = 4096;
                 let source = "int deep(int x) { return x; }";
                 for right_associated in [false, true] {
-                    let mut unit = crate::parser::parse_preprocessed(source, false, true);
+                    let mut unit = crate::parser::parse_preprocessed(source, false, true, &[]);
                     let identifier = || Expr {
                         kind: ExprKind::Identifier("x".into()),
                         span: Span::default(),
