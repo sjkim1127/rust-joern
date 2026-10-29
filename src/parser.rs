@@ -1774,14 +1774,9 @@ impl Parser<'_> {
                     }))
         };
         let compatible = |ty: &str| {
-            let normalize = |ty: &str| {
-                ty.replace('*', " * ")
-                    .split_whitespace()
-                    .filter(|word| !matches!(*word, "const" | "volatile"))
-                    .collect::<String>()
-            };
-            scalar_type(ty)
-                && (!expected_type.contains('*') || normalize(expected_type) == normalize(ty))
+            // Binding types do not preserve pointee cv qualifiers, so pointer
+            // conversions cannot yet be proved safe from this information.
+            scalar_type(ty) && !expected_type.contains('*') && !ty.contains('*')
         };
         match &value.kind {
             ExprKind::Identifier(name) => self
@@ -1794,11 +1789,19 @@ impl Parser<'_> {
                         .map(|(_, ty)| ty)
                 })
                 .is_some_and(|ty| compatible(ty)),
-            ExprKind::Literal(value) if !expected_type.contains('*') => {
-                matches!(value.as_str(), "true" | "false" | "nullptr")
-                    || !value.is_empty() && value.bytes().all(|c| c.is_ascii_digit())
-                    || value.starts_with('"') && value.ends_with('"')
-                    || value.starts_with('\'') && value.ends_with('\'')
+            ExprKind::Literal(value) => {
+                if expected_type.contains('*') {
+                    value == "nullptr"
+                } else if scalar_type(expected_type) {
+                    let integral = !expected_type
+                        .split_whitespace()
+                        .any(|word| matches!(word, "float" | "double"));
+                    !value.is_empty() && value.bytes().all(|c| c.is_ascii_digit())
+                        || integral && matches!(value.as_str(), "true" | "false")
+                        || integral && value.starts_with('\'') && value.ends_with('\'')
+                } else {
+                    false
+                }
             }
             ExprKind::Bracketed(inner) => {
                 self.scalar_initialization_value(inner, expected_type, fields, functions)

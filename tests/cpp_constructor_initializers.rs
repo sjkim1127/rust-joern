@@ -152,3 +152,32 @@ fn saved_parameter_and_prior_member_reads_keep_distinct_bindings() {
         Some("<operator>.indirectFieldAccess")
     );
 }
+
+#[test]
+fn literal_and_pointer_conversions_require_proven_compatibility() {
+    for source in [
+        "struct A { int x; A(): x(nullptr) {} };",
+        "struct A { int x; A(): x(\"abc\") {} };",
+        "struct A { int x; A(int* p): x(p) {} };",
+        "struct A { int* x; A(const int* p): x(p) {} };",
+        // A valid pointer copy is also rejected until pointee qualifiers are
+        // preserved well enough to distinguish it from the case above.
+        "struct A { int* x; A(int* p): x(p) {} };",
+    ] {
+        assert!(
+            analyze(source, "invalid.cpp", &options(true)).is_err(),
+            "{source}"
+        );
+    }
+    for source in [
+        "struct A { int* x; A(): x(nullptr) {} };",
+        "struct A { int x; A(): x(42) {} };",
+        "struct A { bool x; A(): x(true) {} };",
+        "struct A { char x; A(): x('a') {} };",
+    ] {
+        assert!(
+            analyze(source, "valid.cpp", &options(true)).is_ok(),
+            "{source}"
+        );
+    }
+}

@@ -2,7 +2,7 @@
 
 Base: `9f8cad170d6b6883fe08627fa524ecb28128380d` (release SHA-256
 `407537b4402f7a374b7295d8b1edf093340096107ab1f7da8e73acb060d6ee33`).
-Candidate release SHA-256:
+Initial candidate release SHA-256 (before the literal-conversion follow-up):
 `c305264cea566af51b577ce2552e7a6df86c1c5a3fbb56343927dbb53a375d02`.
 
 With both new options absent, strict analysis of eight prepared Snappy/Ninja
@@ -29,3 +29,14 @@ function when `CompressionOptions` is supplied. The supplied visibility has
 not been proved for the exact enclosing source TU: these are diagnostic probes,
 not qualified scoring evidence. The complete Snappy TUs remain unqualified.
 No DecBench metric, backend pin or upstream benchmark population changed.
+
+## Literal-conversion follow-up
+
+The opt-in profile now rejects string literals and incompatible scalar/pointer
+conversions, and accepts `nullptr` for pointer members. It also abstains on
+pointer values from identifiers or calls, including valid pointer copies:
+the available binding type loses pointee cv qualifiers, so it cannot prove that
+such a conversion preserves them. This is a bounded rule, not a complete C++
+conversion checker. A compiler control and focused regression cover these
+cases; the earlier corpus and release-hash evidence above applies to the
+initial candidate, not this follow-up.
