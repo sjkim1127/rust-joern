@@ -11,7 +11,7 @@ proves an ordered list of scalar or plain-pointer fields and requires exactly
 one explicit parenthesized initializer expression for every field. It rejects
 bases, unions, virtual members, references, arrays, bitfields, default member
 initializers and non-scalar subobjects. A type name supplied through
-`cpp_type_names` does not provide this proof. Unknown, duplicated or omitted
+A list of type names does not provide this proof. Unknown, duplicated or omitted
 members and constructor definitions without class context remain errors.
 
 The initial RHS subset is deliberately small: known scalar/pointer identifiers,

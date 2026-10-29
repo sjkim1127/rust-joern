@@ -80,7 +80,6 @@ pub fn analyze_sources(sources: &[(&str, &str)], options: &Options) -> Result<An
     }
     Ok(Analysis {
         schema_version: 1,
-        cpp_type_names: options.cpp_type_names.clone(),
         cpp_constructor_initializers: options.cpp_constructor_initializers,
         functions: units
             .iter_mut()
@@ -122,27 +121,6 @@ fn build_source(source: &str, filename: &str, options: &Options) -> Result<Built
                 .and_then(|s| s.to_str()),
             Some("i" | "ii")
         );
-    if !options.cpp_type_names.is_empty() && !cpp {
-        return Err("cpp_type_names requires C++ input".into());
-    }
-    for name in &options.cpp_type_names {
-        // Bound the transport to identifier-shaped names, not declarations,
-        // template syntax, expressions or invented source fragments.
-        let valid = name
-            .strip_prefix("::")
-            .unwrap_or(name)
-            .split("::")
-            .all(|part| {
-                let mut chars = part.bytes();
-                chars
-                    .next()
-                    .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
-                    && chars.all(|c| c.is_ascii_alphanumeric() || c == b'_')
-            });
-        if !valid {
-            return Err(format!("invalid C++ context type name: {name:?}"));
-        }
-    }
     if options.cpp_constructor_initializers
         && (!cpp || options.data_flow || options.reaching_definitions)
     {
@@ -152,7 +130,6 @@ fn build_source(source: &str, filename: &str, options: &Options) -> Result<Built
         source,
         cpp,
         preprocessed,
-        &options.cpp_type_names,
         options.cpp_constructor_initializers,
     );
     let mut diagnostics: Vec<_> = unit

@@ -10,14 +10,13 @@ use crate::syntax::*;
 
 #[cfg(test)]
 pub fn parse(source: &str, cpp: bool) -> TranslationUnit {
-    parse_preprocessed(source, cpp, false, &[], false)
+    parse_preprocessed(source, cpp, false, false)
 }
 
 pub fn parse_preprocessed(
     source: &str,
     cpp: bool,
     preprocessed: bool,
-    type_names: &[String],
     constructor_initializers: bool,
 ) -> TranslationUnit {
     let (tokens, diagnostics, retained_macro_invocations) =
@@ -30,9 +29,8 @@ pub fn parse_preprocessed(
         limit,
         cpp,
         diagnostics,
-        types: type_names.iter().cloned().collect(),
-        explicit_types: type_names.iter().cloned().collect(),
-        supplied_type_names: type_names.iter().cloned().collect(),
+        types: HashSet::new(),
+        explicit_types: HashSet::new(),
         type_aliases: HashMap::new(),
         extern_c: false,
         extern_c_names: HashSet::new(),
@@ -710,7 +708,6 @@ struct Parser<'a> {
     diagnostics: Vec<ParseDiagnostic>,
     types: HashSet<String>,
     explicit_types: HashSet<String>,
-    supplied_type_names: HashSet<String>,
     type_aliases: HashMap<String, String>,
     extern_c: bool,
     extern_c_names: HashSet<String>,
@@ -6624,9 +6621,7 @@ impl Parser<'_> {
             if self.cpp
                 && minimum <= 15
                 && op == "{"
-                && matches!(&left.kind, ExprKind::Identifier(name)
-                    if self.explicit_types.contains(name)
-                        && (!self.supplied_type_names.contains(name) || !self.variables.contains(name)))
+                && matches!(&left.kind, ExprKind::Identifier(name) if self.explicit_types.contains(name))
             {
                 let initializer = self.prefix();
                 left = Expr {
@@ -6839,7 +6834,6 @@ impl Parser<'_> {
             diagnostics,
             types: self.types.clone(),
             explicit_types: self.explicit_types.clone(),
-            supplied_type_names: self.supplied_type_names.clone(),
             type_aliases: self.type_aliases.clone(),
             variables: self.variables.clone(),
             imports: self.imports.clone(),
@@ -9968,7 +9962,7 @@ mod declaration_tests {
     #[test]
     fn retained_macro_descriptors_only_follow_executable_member_calls() {
         let source = "#define mirror(x) env->ops->mirror(env,x)\nextern __typeof__(env->ops->mirror(env,9)) declaration; void f(void) { env->ops->mirror(env,5); }\n";
-        let unit = parse_preprocessed(source, false, true, &[], false);
+        let unit = parse_preprocessed(source, false, true, false);
         assert!(unit.diagnostics.is_empty(), "{:?}", unit.diagnostics);
         assert_eq!(unit.retained_macro_calls.len(), 1);
         let call = &unit.retained_macro_calls[0];
