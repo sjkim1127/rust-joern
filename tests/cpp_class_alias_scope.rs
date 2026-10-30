@@ -44,3 +44,15 @@ fn nested_alias_and_qualified_class_type_keep_their_scope() {
     assert!(names.contains(&"outside:long int(long int)"));
     assert!(names.contains(&"qualified:S.Value(S.Value)"));
 }
+
+#[test]
+fn class_only_alias_does_not_leak_to_enclosing_scope() {
+    for declaration in ["using Local = int;", "typedef int Local;"] {
+        // Unresolved names can occur in incomplete input. They must not bind
+        // to an alias that was only visible inside the class.
+        let source = format!("struct S {{ {declaration} }}; Local f(Local x) {{ return x; }}");
+        let result = analyze(&source, "scope.cpp", &options()).unwrap();
+        let f = result.functions.iter().find(|f| f.name == "f").unwrap();
+        assert_eq!(f.fullname, "f:ANY(ANY)", "{declaration}");
+    }
+}
